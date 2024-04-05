@@ -25,10 +25,16 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 >
 
+  <parent>
+    <groupId>org.apache.kie.sonataflow</groupId>
+    <artifactId>kie-tools-packages</artifactId>
+    <version>999-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
   <modelVersion>4.0.0</modelVersion>
   <name>KIE Tools :: SonataFlow Quarkus Dev UI Extension</name>
   <groupId>org.apache.kie.sonataflow</groupId>
-  <version>${revision}</version>
   <artifactId>sonataflow-quarkus-devui-parent</artifactId>
   <packaging>pom</packaging>
 
@@ -84,7 +90,7 @@
       <dependency>
         <groupId>io.quarkus</groupId>
         <artifactId>quarkus-bom</artifactId>
-        <version>${quarkus.platform.version}</version> 
+        <version>${quarkus.platform.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -92,33 +98,6 @@
   </dependencyManagement>
 
   <build>
-      <plugins>
-          <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>flatten-maven-plugin</artifactId>
-              <version>${version.flatten.plugin}</version>
-              <configuration>
-                  <updatePomFile>true</updatePomFile>
-                  <flattenMode>resolveCiFriendliesOnly</flattenMode>
-              </configuration>
-              <executions>
-                  <execution>
-                      <id>flatten-revision</id>
-                      <phase>process-resources</phase>
-                      <goals>
-                          <goal>flatten</goal>
-                      </goals>
-                  </execution>
-                  <execution>
-                      <id>flatten-revision-clean</id>
-                      <phase>clean</phase>
-                      <goals>
-                          <goal>clean</goal>
-                      </goals>
-                  </execution>
-              </executions>
-          </plugin>
-      </plugins>
     <pluginManagement>
       <plugins>
         <plugin>
@@ -146,5 +125,28 @@
         </plugin>
       </plugins>
     </pluginManagement>
+
+    <plugins>
+      <plugin>
+        <groupId>com.github.eirslett</groupId>
+        <artifactId>frontend-maven-plugin</artifactId>
+        <inherited>false</inherited>
+        <configuration>
+          <workingDirectory>../../</workingDirectory>
+        </configuration>
+        <executions>
+          <execution>
+            <id>pnpm build:prod</id>
+            <goals>
+              <goal>pnpm</goal>
+            </goals>
+            <configuration>
+              <skip>${skip.ui.build}</skip>
+              <arguments>-F serverless-workflow-dev-ui-webapp... build:prod</arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
   </build>
 </project>

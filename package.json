@@ -19,6 +19,7 @@
     "@kie-tools-scripts/run-script-if": "workspace:*",
     "@kie-tools-scripts/sparse-checkout": "workspace:*",
     "@kie-tools-scripts/update-version": "workspace:*",
+    "@kie/lock-treatment-tool": "^0.2.4",
     "@nice-move/prettier-plugin-package-json": "^0.6.1",
     "@prettier/plugin-xml": "^2",
     "@types/node": "^18.13.0",
