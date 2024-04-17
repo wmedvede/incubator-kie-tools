@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+  <parent>
+    <groupId>org.apache</groupId>
+    <artifactId>apache</artifactId>
+    <version>30</version>
+  </parent>
+
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.apache.kie.sonataflow</groupId>
+  <artifactId>kie-tools</artifactId>
+  <version>999-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>KIE Tools</name>
+  <description>KIE Tools</description>
+
+  <url>https://sonataflow.org/</url>
+  <inceptionYear>2019</inceptionYear>
+  <organization>
+    <name>The Apache Software Foundation</name>
+    <url>https://apache.org/</url>
+  </organization>
+
+  <licenses>
+    <license>
+      <name>Apache Software License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <name>All developers are listed in the KIE GitHub organization</name>
+      <url>https://github.com/orgs/kiegroup/people</url>
+    </developer>
+  </developers>
+
+  <!--
+      CONVENTIONS:
+      - A version property must be specified in the format "version.{groupId}", optionally with a suffix to make it unique.
+      - Version properties must be sorted alphabetically (other form of sorting were found to be unclear and ambiguous).
+  -->
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.build.outputTimestamp>2024-01-16T00:00:00Z</project.build.outputTimestamp>
+    <version.maven.artifact.plugin>3.4.1</version.maven.artifact.plugin>
+
+    <version.frontend.plugin>1.15.0</version.frontend.plugin>
+    <version.node>v18.16.0</version.node>
+    <version.npm>6.10.3</version.npm>
+    <version.pnpm>v8.7.0</version.pnpm>
+  </properties>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-artifact-plugin</artifactId>
+          <version>${version.maven.artifact.plugin}</version>
+          <configuration>
+            <outputTimestamp>${project.build.outputTimestamp}</outputTimestamp>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>com.github.eirslett</groupId>
+          <artifactId>frontend-maven-plugin</artifactId>
+          <version>${version.frontend.plugin}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+    <plugins>
+      <plugin>
+        <artifactId>maven-clean-plugin</artifactId>
+        <inherited>false</inherited>
+        <configuration>
+          <filesets>
+            <fileset>
+              <directory>.</directory>
+              <includes>
+                <include>**/node_modules/</include>
+              </includes>
+            </fileset>
+          </filesets>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>com.github.eirslett</groupId>
+        <artifactId>frontend-maven-plugin</artifactId>
+        <inherited>false</inherited>
+        <configuration>
+          <workingDirectory>${path.to.root}</workingDirectory>
+        </configuration>
+        <executions>
+          <execution>
+            <id>install-node-and-npm</id>
+            <goals>
+              <goal>install-node-and-npm</goal>
+            </goals>
+            <configuration>
+              <skip>${skip.ui.deps}</skip>
+              <nodeVersion>${version.node}</nodeVersion>
+              <npmVersion>${version.npm}</npmVersion>
+            </configuration>
+          </execution>
+          <execution>
+            <id>install-node-and-pnpm</id>
+            <goals>
+              <goal>install-node-and-pnpm</goal>
+            </goals>
+            <configuration>
+              <skip>${skip.ui.deps}</skip>
+              <nodeVersion>${version.node}</nodeVersion>
+              <pnpmVersion>${version.pnpm}</pnpmVersion>
+            </configuration>
+          </execution>
+          <execution>
+            <id>npm install lock-treatment-tool</id>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <skip>${skip.ui.deps}</skip>
+              <npmRegistryURL>${env.NPM_REGISTRY_URL}</npmRegistryURL>
+              <arguments>install @kie/lock-treatment-tool@0.2.4 -w</arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>lock-treatment-tool execution</id>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <skip>${skip.ui.deps}</skip>
+              <npmRegistryURL>${env.NPM_REGISTRY_URL}</npmRegistryURL>
+              <arguments>run env -- locktt --skipIntegrity</arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>pnpm bootstrap</id>
+            <goals>
+              <goal>pnpm</goal>
+            </goals>
+            <configuration>
+              <skip>${skip.ui.deps}</skip>
+              <npmRegistryURL>${env.PNPM_REGISTRY_URL}</npmRegistryURL>
+              <arguments>bootstrap</arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!-- distributionManagement section -->
+  <distributionManagement>
+    <repository>
+      <id>apache-release-staging-repository</id>
+      <name>Apache Release Staging Repository</name>
+      <url>https://repository.apache.org/service/local/staging/deploy/maven2</url>
+    </repository>
+    <snapshotRepository>
+      <id>apache-snapshots-repository</id>
+      <name>Apache Snapshot Repository</name>
+      <url>https://repository.apache.org/content/repositories/snapshots/</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <repositories>
+    <!-- Bootstrap repository to locate the parent pom when the parent pom
+      has not been build locally. -->
+    <repository>
+      <id>apache-public-repository-group</id>
+      <name>Apache Public Repository Group</name>
+      <url>https://repository.apache.org/content/groups/public/</url>
+      <layout>default</layout>
+      <releases>
+        <enabled>true</enabled>
+        <updatePolicy>never</updatePolicy>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+        <updatePolicy>daily</updatePolicy>
+      </snapshots>
+    </repository>
+  </repositories>
+
+  <pluginRepositories>
+    <pluginRepository>
+      <!-- Duplicating the Maven Central repository here (as it is already coming from Super POM) makes the build much faster,
+           as the Maven Central is now treated as the first (default) repository (because it is listed before the Apache Nexus one).
+           Artifacts with release (fixed) versions are being downloaded primarily from there. Without the central being the
+           first repository the Apache Nexus would be contacted first and since it is quite slow it slows down the build.
+           We use Apache Nexus repo only to download our SNAPSHOTs. -->
+      <id>central</id>
+      <name>Central Repository</name>
+      <url>https://repo.maven.apache.org/maven2</url>
+      <layout>default</layout>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
+    <pluginRepository>
+      <id>apache-public-repository-group</id>
+      <name>Apache Public Repository Group</name>
+      <url>https://repository.apache.org/content/groups/public/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </pluginRepository>
+  </pluginRepositories>
+
+  <modules>
+    <module>packages</module>
+  </modules>
+
+</project>
