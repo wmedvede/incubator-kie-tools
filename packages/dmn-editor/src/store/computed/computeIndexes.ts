@@ -19,7 +19,7 @@
 
 import { DMNDI15__DMNEdge, DMNDI15__DMNShape } from "@kie-tools/dmn-marshaller/dist/schemas/dmn-1_5/ts-gen/types";
 import { XmlQName, parseXmlQName } from "@kie-tools/xml-parser-ts/dist/qNames";
-import { KIE_DMN_UNKNOWN_NAMESPACE } from "../../Dmn15Spec";
+import { KIE_DMN_UNKNOWN_NAMESPACE } from "@kie-tools/dmn-marshaller/dist/schemas/dmn-1_5/Dmn15Spec";
 import { buildXmlHref } from "../../xml/xmlHrefs";
 import { State } from "../Store";
 
@@ -32,7 +32,8 @@ export function computeIndexedDrd(
   const dmnShapesByHref = new Map<string, DMNDI15__DMNShape & { index: number; dmnElementRefQName: XmlQName }>();
   const hrefsOfDmnElementRefsOfShapesPointingToExternalDmnObjects = new Set<string>();
 
-  const diagramElements = definitions["dmndi:DMNDI"]?.["dmndi:DMNDiagram"]?.[drdIndex]["dmndi:DMNDiagramElement"] ?? [];
+  const diagramElements =
+    definitions["dmndi:DMNDI"]?.["dmndi:DMNDiagram"]?.[drdIndex]?.["dmndi:DMNDiagramElement"] ?? [];
   for (let i = 0; i < diagramElements.length; i++) {
     const e = diagramElements[i];
     // DMNEdge

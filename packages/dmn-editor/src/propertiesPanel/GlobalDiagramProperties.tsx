@@ -151,6 +151,7 @@ export function GlobalDiagramProperties() {
             <FormSection style={{ paddingLeft: "20px", marginTop: 0 }}>
               <FormGroup label="ID">
                 <ClipboardCopy
+                  placeholder="Enter a diagram ID..."
                   isReadOnly={false}
                   hoverTip="Copy"
                   clickTip="Copied"
@@ -166,6 +167,7 @@ export function GlobalDiagramProperties() {
 
               <FormGroup label="Namespace">
                 <ClipboardCopy
+                  placeholder="Enter a diagram Namespace..."
                   isReadOnly={false}
                   hoverTip="Copy"
                   clickTip="Copied"
@@ -195,7 +197,7 @@ export function GlobalDiagramProperties() {
               setRegenerateIdConfirmationModal(false);
               dmnEditorStoreApi.setState((state) => {
                 state.dmn.model.definitions["@_id"] = generateUuid();
-                state.dmn.model.definitions["@_namespace"] = `https://kie.org/dmn/${generateUuid()}`;
+                state.dmn.model.definitions["@_namespace"] = `https://kie.apache.org/dmn/${generateUuid()}`;
               });
             }}
           >

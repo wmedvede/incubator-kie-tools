@@ -35,7 +35,7 @@ import { Draggable, DragAndDrop, useDraggableItemContext } from "../draggable/Dr
 import "./DocumentationLinksFormGroup.css";
 
 const PLACEHOLDER_URL_TITLE = "Enter a title...";
-const PLACEHOLDER_URL = "http://";
+const PLACEHOLDER_URL = "https://...";
 
 export function DocumentationLinksFormGroup({
   isReadonly,
@@ -165,7 +165,7 @@ export function DocumentationLinksFormGroup({
   }, []);
 
   const draggableItem = useCallback(
-    (kieAttachment, index) => {
+    (kieAttachment: Namespaced<"kie", KIE__tAttachment>, index: number) => {
       return (
         <Draggable
           key={valuesUuid?.[index] ?? generateUuid()}
@@ -173,8 +173,8 @@ export function DocumentationLinksFormGroup({
           rowClassName={index !== 0 ? "kie-dmn-editor--documentation-link--not-first-element" : ""}
           handlerStyle={
             expandedUrls[index]
-              ? { alignSelf: "flex-start", paddingTop: "8px", paddingLeft: "24px", paddingRight: "8px" }
-              : { paddingLeft: "24px", paddingRight: "8px" }
+              ? { alignSelf: "flex-start", paddingTop: "8px", paddingLeft: "16px", paddingRight: "16px" }
+              : { paddingLeft: "16px", paddingRight: "16px" }
           }
         >
           <li>
@@ -257,7 +257,7 @@ function DocumentationLinksInput({
     } catch (error) {
       try {
         if (!newUrl.includes("http://") && !newUrl.includes("https://")) {
-          const urlWithProtocol = "http://" + newUrl + "/";
+          const urlWithProtocol = "https://" + newUrl + "/";
           const url = new URL(urlWithProtocol);
           // the new URL automatically converts the whitespaces to %20
           // this check verifies if the url has whitespaces
@@ -333,7 +333,10 @@ function DocumentationLinksInput({
 
   return (
     <React.Fragment>
-      <div className={"kie-dmn-editor--documentation-link--row"}>
+      <div
+        className={"kie-dmn-editor--documentation-link--row"}
+        data-testid={"kie-tools--dmn-editor--documentation-link--row"}
+      >
         <Button
           title={"Expand / collapse documentation link"}
           variant={ButtonVariant.plain}
@@ -347,7 +350,7 @@ function DocumentationLinksInput({
             <>
               <div ref={urlTitleRef} className={"kie-dmn-editor--documentation-link--row-title"}>
                 {isUrl ? (
-                  <a href={url} target={"_blank"}>
+                  <a href={url} target={"_blank"} data-testid={"kie-tools--dmn-editor--documentation-link--row-title"}>
                     {title}
                   </a>
                 ) : (

@@ -50,7 +50,7 @@ var cfgTestInputQuarkusCreate_Success = []CfgTestInputQuarkusCreate{
 		Extensions:  "quarkus-jsonp,quarkus-smallrye-openapi",
 		DependenciesVersion: metadata.DependenciesVersion{
 			QuarkusPlatformGroupId: "io.quarkus.platform",
-			QuarkusVersion:         "3.2.9.Final",
+			QuarkusVersion:         "3.2.10.Final",
 		},
 	}},
 }
@@ -149,7 +149,6 @@ func RunQuarkusCreateTest(t *testing.T, test CfgTestInputQuarkusCreate) string {
 	require.NoErrorf(t, err, "Error reading workflow template: %v", err)
 	expectedFileContent := string(workflowFileData)
 	VerifyFileContent(t, workflowFilePath, expectedFileContent)
-
 	return projectName
 }
 

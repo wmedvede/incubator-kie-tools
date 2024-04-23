@@ -239,7 +239,7 @@ export const InputDataNode = React.memo(
           onDoubleClick={triggerEditing}
           onKeyDown={triggerEditingIfEnter}
           style={alternativeSvgStyle}
-          className={`kie-dmn-editor--input-data-node ${selectedAlternativeClass}`}
+          className={`kie-dmn-editor--input-data-node ${additionalClasses} ${selectedAlternativeClass}`}
           ref={ref}
           tabIndex={-1}
           data-nodehref={id}
@@ -247,7 +247,7 @@ export const InputDataNode = React.memo(
         >
           {/* {`render count: ${renderCount.current}`}
           <br /> */}
-          <div className={`kie-dmn-editor--node ${additionalClasses}`}>
+          <div className={"kie-dmn-editor--node"}>
             <InfoNodePanel isVisible={!isTargeted && shouldActLikeHovered} />
 
             <OutgoingStuffNodePanel
@@ -279,6 +279,7 @@ export const InputDataNode = React.memo(
                 nodeType={type as typeof NODE_TYPES.inputData}
                 snapGrid={snapGrid}
                 nodeId={id}
+                nodeName={inputData["@_label"] ?? inputData["@_name"]}
                 nodeShapeIndex={shape.index}
                 isAlternativeInputDataShape={isAlternativeInputDataShape}
               />
@@ -374,9 +375,12 @@ export const DecisionNode = React.memo(
     const onTypeRefChange = useCallback<OnTypeRefChange>(
       (newTypeRef) => {
         dmnEditorStoreApi.setState((state) => {
-          const drgElement = state.dmn.model.definitions.drgElement![index] as DMN15__tInputData;
+          const drgElement = state.dmn.model.definitions.drgElement![index] as DMN15__tDecision;
           drgElement.variable ??= { "@_name": decision["@_name"] };
           drgElement.variable["@_typeRef"] = newTypeRef;
+          if (drgElement.expression) {
+            drgElement.expression["@_typeRef"] = newTypeRef;
+          }
         });
       },
       [decision, dmnEditorStoreApi, index]
@@ -463,6 +467,7 @@ export const DecisionNode = React.memo(
               nodeType={type as typeof NODE_TYPES.decision}
               snapGrid={snapGrid}
               nodeId={id}
+              nodeName={decision["@_label"] ?? decision["@_name"] ?? ""}
               nodeShapeIndex={shape.index}
             />
           )}
@@ -525,9 +530,12 @@ export const BkmNode = React.memo(
     const onTypeRefChange = useCallback<OnTypeRefChange>(
       (newTypeRef) => {
         dmnEditorStoreApi.setState((state) => {
-          const drgElement = state.dmn.model.definitions.drgElement![index] as DMN15__tInputData;
+          const drgElement = state.dmn.model.definitions.drgElement![index] as DMN15__tBusinessKnowledgeModel;
           drgElement.variable ??= { "@_name": bkm["@_name"] };
           drgElement.variable["@_typeRef"] = newTypeRef;
+          if (drgElement.encapsulatedLogic) {
+            drgElement.encapsulatedLogic["@_typeRef"] = newTypeRef;
+          }
         });
       },
       [bkm, dmnEditorStoreApi, index]
@@ -598,6 +606,7 @@ export const BkmNode = React.memo(
               nodeType={type as typeof NODE_TYPES.bkm}
               snapGrid={snapGrid}
               nodeId={id}
+              nodeName={bkm["@_label"] ?? bkm["@_name"] ?? ""}
               nodeShapeIndex={shape.index}
             />
           )}
@@ -724,6 +733,7 @@ export const KnowledgeSourceNode = React.memo(
               nodeType={type as typeof NODE_TYPES.knowledgeSource}
               snapGrid={snapGrid}
               nodeId={id}
+              nodeName={knowledgeSource["@_label"] ?? knowledgeSource["@_name"] ?? ""}
               nodeShapeIndex={shape.index}
             />
           )}
@@ -840,6 +850,7 @@ export const TextAnnotationNode = React.memo(
               nodeType={type as typeof NODE_TYPES.textAnnotation}
               snapGrid={snapGrid}
               nodeId={id}
+              nodeName={textAnnotation["@_label"] ?? textAnnotation.text?.__$$text ?? ""}
               nodeShapeIndex={shape.index}
             />
           )}
@@ -1036,6 +1047,7 @@ export const DecisionServiceNode = React.memo(
               nodeType={type as typeof NODE_TYPES.decisionService}
               snapGrid={snapGrid}
               nodeId={id}
+              nodeName={decisionService["@_label"] ?? decisionService["@_name"] ?? ""}
               nodeShapeIndex={shape.index}
             />
           )}
@@ -1181,6 +1193,7 @@ export const GroupNode = React.memo(
               nodeType={type as typeof NODE_TYPES.group}
               snapGrid={snapGrid}
               nodeId={id}
+              nodeName={group["@_label"] ?? group["@_name"] ?? ""}
               nodeShapeIndex={shape.index}
             />
           )}
@@ -1257,6 +1270,7 @@ export const UnknownNode = React.memo(
               nodeType={type as typeof NODE_TYPES.unknown}
               snapGrid={snapGrid}
               nodeId={id}
+              nodeName={"unknown"}
               nodeShapeIndex={shape.index}
             />
           )}
@@ -1287,6 +1301,7 @@ const resizerControlStyle = {
 type NodeResizeHandleProps = {
   snapGrid: SnapGrid;
   nodeId: string;
+  nodeName: string;
   nodeShapeIndex: number;
 } & (
   | { nodeType: Extract<NodeType, typeof NODE_TYPES.inputData>; isAlternativeInputDataShape: boolean }
@@ -1306,6 +1321,7 @@ export function NodeResizerHandle(props: NodeResizeHandleProps) {
   return (
     <RF.NodeResizeControl style={resizerControlStyle} minWidth={minSize["@_width"]} minHeight={minSize["@_height"]}>
       <div
+        data-testid={`kie-tools--dmn-editor--${props.nodeName}-resize-handle`}
         style={{
           position: "absolute",
           top: "-10px",
