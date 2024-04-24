@@ -21,6 +21,7 @@ This package contains the `Containerfile/Dockerfile` and scripts to build a cont
   export KIE_SANDBOX__imageAccount=<account>
   export KIE_SANDBOX__imageName=<image-name>
   export KIE_SANDBOX__imageBuildTags=<image-tags>
+  export KIE_SANDBOX__imagePort=<port>
   ```
 
   > Default values can be found [here](./env/index.js).
@@ -63,7 +64,7 @@ This package contains the `Containerfile/Dockerfile` and scripts to build a cont
 
 1. Run a container with custom environment variables:
 
-   [comment]: <> (//TODO: Use EnvJson.schema.json to generate this documentation somehow.. See https://github.com/kiegroup/kie-issues/issues/16)
+   [comment]: <> (//TODO: Use EnvJson.schema.json to generate this documentation somehow.. See https://github.com/apache/incubator-kie-issues/issues/16)
 
    |                              Name                               |                                                         Description                                                         |                               Default                               |
    | :-------------------------------------------------------------: | :-------------------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------: |
@@ -93,15 +94,22 @@ This package contains the `Containerfile/Dockerfile` and scripts to build a cont
    2. Enabling authentication with a GitHub Enterprise Server instance.
 
       ```bash
-      docker run -t -p 8080:8080 -e KIE_SANDBOX_AUTH_PROVIDERS='[{
-        "id":"github_at_my_company", \
-        "domain":"github.my-company.com", \
-        "supportedGitRemoteDomains":["github.my-company.com","gist.github.my-company.com"], \
-        "type":"github", \
-        "name":"GitHub @ MyCompany", \
-        "enabled":true, \
-        "group":"git" \
-      }]' -i --rm quay.io/kie-tools/kie-sandbox-image:latest
+      docker run -t -p 8080:8080 \
+      -e "KIE_SANDBOX_AUTH_PROVIDERS=$(cat << EOConfig
+      [
+          {
+            "id":"github_at_my_company",
+            "domain":"github.ibm.com",
+            "supportedGitRemoteDomains":["github.ibm.com","gist.github.ibm.com"],
+            "type":"github",
+            "name":"GitHub @ MyCompany",
+            "enabled":true,
+            "group":"git"
+          }
+      ]
+      EOConfig
+      )" \
+      -i --rm quay.io/kie-tools/kie-sandbox-image:latest
       ```
 
       _NOTE: Replace `docker` with `podman` if necessary._
@@ -125,15 +133,22 @@ This package contains the `Containerfile/Dockerfile` and scripts to build a cont
    5. Adding Accelerators available for your users.
 
       ```bash
-      docker run -t -p 8080:8080 -e KIE_SANDBOX_ACCELERATORS='[{ \
-        name: "Quarkus", \
-        iconUrl: "https://github.com/kiegroup/kie-sandbox-quarkus-accelerator/raw/0.0.0/quarkus-logo.png", \
-        gitRepositoryUrl: "https://github.com/kiegroup/kie-sandbox-quarkus-accelerator", \
-        gitRepositoryGitRef: "0.0.0", \
-        dmnDestinationFolder: "src/main/resources/dmn", \
-        bpmnDestinationFolder: "src/main/resources/bpmn", \
-        otherFilesDestinationFolder: "src/main/resources/others", \
-      }]' -i --rm quay.io/kie-tools/kie-sandbox-image:latest
+      docker run -t -p 8080:8080 \
+      -e "KIE_SANDBOX_AUTH_PROVIDERS=$(cat << EOConfig
+      [
+        {
+          "name": "Quarkus",
+          "iconUrl": "https://github.com/apache/incubator-kie-sandbox-quarkus-accelerator/raw/0.0.0/quarkus-logo.png",
+          "gitRepositoryUrl": "https://github.com/apache/incubator-kie-sandbox-quarkus-accelerator",
+          "gitRepositoryGitRef": "0.0.0",
+          "dmnDestinationFolder": "src/main/resources/dmn",
+          "bpmnDestinationFolder": "src/main/resources/bpmn",
+          "otherFilesDestinationFolder": "src/main/resources/others",
+        }
+      ]
+      EOConfig
+      )" \
+      -i --rm quay.io/kie-tools/kie-sandbox-image:latest
       ```
 
       _NOTE: Replace `docker` with `podman` if necessary._
@@ -262,8 +277,8 @@ Here's an example of what it should look like:
 ```js
 {
     name: "Quarkus",
-    iconUrl: `https://github.com/kiegroup/kie-sandbox-quarkus-accelerator/raw/0.0.0/quarkus-logo.png`,
-    gitRepositoryUrl: "https://github.com/kiegroup/kie-sandbox-quarkus-accelerator",
+    iconUrl: `https://github.com/apache/incubator-kie-sandbox-quarkus-accelerator/raw/0.0.0/quarkus-logo.png`,
+    gitRepositoryUrl: "https://github.com/apache/incubator-kie-sandbox-quarkus-accelerator",
     gitRepositoryGitRef: "main,
     dmnDestinationFolder: "src/main/resources/dmn",
     bpmnDestinationFolder: "src/main/resources/bpmn",

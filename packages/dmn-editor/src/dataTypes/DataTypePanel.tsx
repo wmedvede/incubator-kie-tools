@@ -42,15 +42,16 @@ import { getNewItemDefinition, isStruct } from "./DataTypeSpec";
 import { TrashIcon } from "@patternfly/react-icons/dist/js/icons/trash-icon";
 import { Label } from "@patternfly/react-core/dist/js/components/Label";
 import { CopyIcon } from "@patternfly/react-icons/dist/js/icons/copy-icon";
-import { UniqueNameIndex } from "../Dmn15Spec";
+import { UniqueNameIndex } from "@kie-tools/dmn-marshaller/dist/schemas/dmn-1_5/Dmn15Spec";
 import { buildFeelQNameFromNamespace } from "../feel/buildFeelQName";
 import { buildClipboardFromDataType } from "../clipboard/Clipboard";
-import { Constraints } from "./Constraints";
+import { ConstraintsFromAllowedValuesAttribute, ConstraintsFromTypeConstraintAttribute } from "./Constraints";
 import { original } from "immer";
 import { builtInFeelTypeNames } from "./BuiltInFeelTypes";
 import { useDmnEditor } from "../DmnEditorContext";
 import { useResolvedTypeRef } from "./useResolvedTypeRef";
 import { useExternalModels } from "../includedModels/DmnEditorDependenciesContext";
+import { Alert } from "@patternfly/react-core/dist/js/components/Alert/Alert";
 
 export function DataTypePanel({
   isReadonly,
@@ -75,6 +76,7 @@ export function DataTypePanel({
         if (isChecked) {
           itemDefinition.typeRef = undefined;
           itemDefinition.itemComponent = [];
+          itemDefinition.typeConstraint = undefined;
           itemDefinition.allowedValues = undefined;
         } else {
           itemDefinition.typeRef = { __$$text: DmnBuiltInDataType.Any };
@@ -93,7 +95,22 @@ export function DataTypePanel({
 
       editItemDefinition(dataType.itemDefinition["@_id"]!, (itemDefinition) => {
         itemDefinition["@_isCollection"] = isChecked;
-        itemDefinition.allowedValues = undefined;
+        if (isChecked === true) {
+          itemDefinition.allowedValues = itemDefinition.typeConstraint
+            ? {
+                ...itemDefinition.typeConstraint,
+              }
+            : undefined;
+
+          itemDefinition.typeConstraint = undefined;
+        } else {
+          itemDefinition.typeConstraint = itemDefinition.allowedValues
+            ? {
+                ...itemDefinition.allowedValues,
+              }
+            : undefined;
+          itemDefinition.allowedValues = undefined;
+        }
       });
     },
     [dataType.itemDefinition, editItemDefinition, isReadonly]
@@ -109,6 +126,7 @@ export function DataTypePanel({
         itemDefinition.typeRef = { __$$text: typeRef };
         const originalItemDefinition = original(itemDefinition);
         if (originalItemDefinition?.typeRef?.__$$text !== typeRef) {
+          itemDefinition.typeConstraint = undefined;
           itemDefinition.allowedValues = undefined;
         }
       });
@@ -340,17 +358,52 @@ export function DataTypePanel({
               typeRef={resolvedTypeRef}
               onChange={changeTypeRef}
             />
+            <br />
+            <br />
+            {dataType.itemDefinition["@_isCollection"] === true ? (
+              <>
+                <Title size={"md"} headingLevel="h4">
+                  Collection constraint
+                </Title>
+                <ConstraintsFromTypeConstraintAttribute
+                  isReadonly={isReadonly}
+                  itemDefinition={dataType.itemDefinition}
+                  editItemDefinition={editItemDefinition}
+                  defaultsToAllowedValues={false}
+                />
+                <br />
+                <br />
+                <Title size={"md"} headingLevel="h4">
+                  Collection item constraint
+                </Title>
+                <Alert variant="warning" isInline isPlain title="Deprecated">
+                  <p>
+                    Creating constraints for the collection items directly on the collection itself is deprecated since
+                    DMN 1.5 and will possibly be removed in future versions. To prepare your DMN model for future
+                    updates, please create a dedicated Data Type for the items of this list and add constraints there.
+                  </p>
+                </Alert>
+                <br />
 
-            <br />
-            <br />
-            <Title size={"md"} headingLevel="h4">
-              Constraints
-            </Title>
-            <Constraints
-              isReadonly={isReadonly}
-              itemDefinition={dataType.itemDefinition}
-              editItemDefinition={editItemDefinition}
-            />
+                <ConstraintsFromAllowedValuesAttribute
+                  isReadonly={isReadonly}
+                  itemDefinition={dataType.itemDefinition}
+                  editItemDefinition={editItemDefinition}
+                />
+              </>
+            ) : (
+              <>
+                <Title size={"md"} headingLevel="h4">
+                  Constraints
+                </Title>
+                <ConstraintsFromTypeConstraintAttribute
+                  isReadonly={isReadonly}
+                  itemDefinition={dataType.itemDefinition}
+                  editItemDefinition={editItemDefinition}
+                  defaultsToAllowedValues={true}
+                />
+              </>
+            )}
           </>
         )}
         {isStruct(dataType.itemDefinition) && (
