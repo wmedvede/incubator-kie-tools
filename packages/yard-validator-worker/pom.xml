@@ -22,10 +22,16 @@
   xmlns="http://maven.apache.org/POM/4.0.0"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 >
+    <parent>
+        <groupId>org.kie</groupId>
+        <artifactId>kie-tools-maven-base</artifactId>
+        <version>${revision}</version>
+        <relativePath>./node_modules/@kie-tools/maven-base/pom.xml</relativePath>
+    </parent>
+
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.kie.kogito</groupId>
     <artifactId>yard-validator-worker</artifactId>
-    <version>${revision}</version>
 
     <licenses>
         <license>
@@ -41,19 +47,14 @@
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <surefire-plugin.version>3.0.0-M5</surefire-plugin.version>
-        <version.junit>4.13.1</version.junit>
-        <j2cl.maven.plugin.version>0.20</j2cl.maven.plugin.version>
-        <version.org.junit>4.13.1</version.org.junit>
+        <j2cl.maven.plugin.version>0.23.0</j2cl.maven.plugin.version>
     </properties>
 
     <dependencies>
         <dependency>
-            <groupId>org.treblereel.gwt.yaml.mapper</groupId>
+            <groupId>org.kie.j2cl.tools.yaml.mapper</groupId>
             <artifactId>common</artifactId>
-            <version>${yaml.mapper}</version>
+            <version>0.4</version>
         </dependency>
 
         <dependency>
@@ -71,7 +72,7 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>${version.org.junit}</version>
+            <version>${version.junit}</version>
             <scope>test</scope>
         </dependency>
 
@@ -85,7 +86,7 @@
         </resources>
         <plugins>
             <plugin>
-                <groupId>com.vertispan.j2cl</groupId>
+                <groupId>org.kie.j2cl.tools</groupId>
                 <artifactId>j2cl-maven-plugin</artifactId>
                 <version>${j2cl.maven.plugin.version}</version>
                 <executions>

@@ -31,6 +31,7 @@ const CONSTRAINT_START_ID = "start";
 const CONSTRAINT_END_ID = "end";
 
 export function ConstraintsRange({
+  id,
   isReadonly,
   value,
   expressionValue,
@@ -38,6 +39,7 @@ export function ConstraintsRange({
   typeHelper,
   onSave,
   isDisabled,
+  renderOnPropertiesPanel,
 }: ConstraintComponentProps) {
   const start = useMemo(
     () => typeHelper.recover(isRange(value ?? "", typeHelper.check)?.[0]) ?? "",
@@ -308,8 +310,12 @@ export function ConstraintsRange({
           </HelperText>
         </div>
       </div>
-      <br />
-      <ConstraintsExpression isReadonly={true} value={expressionValue ?? ""} type={type} />
+      {!renderOnPropertiesPanel && (
+        <>
+          <br />
+          <ConstraintsExpression id={id} isReadonly={true} value={expressionValue ?? ""} type={type} />
+        </>
+      )}
     </div>
   );
 }
