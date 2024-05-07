@@ -4,10 +4,12 @@ go 1.21
 
 toolchain go1.21.6
 
-replace github.com/apache/incubator-kie-kogito-serverless-operator/api v0.0.0 => github.com/apache/incubator-kie-kogito-serverless-operator/api v0.0.0-20240126134605-2b5056d12bb9
+replace github.com/apache/incubator-kie-tools/packages/kogito-serverless-operator/api v0.0.0 => ./node_modules/@kie-tools/kogito-serverless-operator/api
+
+replace github.com/apache/incubator-kie-tools/packages/kogito-serverless-operator/workflowproj v0.0.0 => ./node_modules/@kie-tools/kogito-serverless-operator/workflowproj
 
 require (
-	github.com/apache/incubator-kie-kogito-serverless-operator/workflowproj v0.0.0-20240122.0.20240219180504-5ebaf85efc66
+	github.com/apache/incubator-kie-tools/packages/kogito-serverless-operator/workflowproj v0.0.0
 	github.com/beevik/etree v1.2.0
 	github.com/docker/docker v24.0.9+incompatible
 	github.com/docker/go-connections v0.4.0
@@ -22,7 +24,7 @@ require (
 
 require (
 	github.com/Microsoft/go-winio v0.6.1 // indirect
-	github.com/apache/incubator-kie-kogito-serverless-operator/api v0.0.0 // indirect
+	github.com/apache/incubator-kie-tools/packages/kogito-serverless-operator/api v0.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -85,14 +87,14 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
-	golang.org/x/crypto v0.17.0 // indirect
+	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
 	golang.org/x/mod v0.13.0 // indirect
-	golang.org/x/net v0.17.0 // indirect
+	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/oauth2 v0.13.0 // indirect
 	golang.org/x/sync v0.4.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
-	golang.org/x/term v0.15.0 // indirect
+	golang.org/x/sys v0.18.0 // indirect
+	golang.org/x/term v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.14.0 // indirect
