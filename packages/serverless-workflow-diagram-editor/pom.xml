@@ -60,19 +60,6 @@
     <url>https://github.com/apache/incubator-kie-issues/issues</url>
   </issueManagement>
 
-  <repositories>
-    <repository>
-      <id>jboss</id>
-      <name>JBoss Public Repo</name>
-      <url>https://repository.jboss.org/nexus/content/groups/public</url>
-    </repository>
-    <repository>
-      <id>sonatype-public</id>
-      <name>Sonatype Public Snapshots Repo</name>
-      <url>https://oss.sonatype.org/content/repositories/public</url>
-    </repository>
-  </repositories>
-
   <modules>
     <!-- APPFORMER -->
     <module>appformer-bom</module>
@@ -97,29 +84,6 @@
     <module>third_party</module>
 
   </modules>
-
-  <pluginRepositories>
-    <pluginRepository>
-      <id>jboss-public-repository-group</id>
-      <name>JBoss Public Repository Group</name>
-      <url>https://repository.jboss.org/nexus/content/groups/public/</url>
-    </pluginRepository>
-    <pluginRepository>
-      <id>jboss-snapshots-repository</id>
-      <name>JBoss Snapshot Repository</name>
-      <url>https://repository.jboss.org/nexus/content/repositories/snapshots/</url>
-    </pluginRepository>
-    <pluginRepository>
-      <id>sonatype-releases-repository</id>
-      <name>Sonatype Release Repository</name>
-      <url>https://oss.sonatype.org/content/repositories/releases/</url>
-    </pluginRepository>
-    <pluginRepository>
-      <id>sonatype-snapshots-repository</id>
-      <name>Sonatype Snapshot Repository</name>
-      <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
-    </pluginRepository>
-  </pluginRepositories>
 
   <dependencies>
     <dependency>
@@ -239,7 +203,7 @@
     <version.site.plugin>3.7.1</version.site.plugin>
     <version.spotbugs-maven-plugin>3.1.8</version.spotbugs-maven-plugin>
     <version.sonar.plugin>3.9.1.2184</version.sonar.plugin>
-    <version.source.plugin>3.0.1</version.source.plugin>
+    <version.source.plugin>3.3.1</version.source.plugin>
     <version.surefire.plugin>3.2.5</version.surefire.plugin>
     <version.war.plugin>3.2.2</version.war.plugin>
     <version.zanata.plugin>2.3.0</version.zanata.plugin>
@@ -718,7 +682,7 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>flatten-maven-plugin</artifactId>
-        <version>1.3.0</version>
+        <version>1.6.0</version>
         <configuration>
           <updatePomFile>true</updatePomFile>
           <flattenMode>resolveCiFriendliesOnly</flattenMode>
