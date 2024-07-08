@@ -214,7 +214,6 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-
     </dependencies>
   </dependencyManagement>
 
@@ -229,5 +228,4 @@
       </plugins>
     </pluginManagement>
   </build>
-
 </project>
