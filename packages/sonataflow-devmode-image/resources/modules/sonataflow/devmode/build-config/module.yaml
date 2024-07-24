@@ -34,6 +34,10 @@ artifacts:
     path: ./sonataflow-quarkus-devui-maven-repo.tar
   - name: kie-tools-maven-base-maven-repo.tar
     path: ./kie-tools-maven-base-maven-repo.tar
-
+  # WM, add modules manually to be able to use the bits in main local build, otherwise they are taken from the apache maven repo
+  - name: kogito-addons-quarkus-data-index-common-runtime.tar
+    path: ./kogito-addons-quarkus-data-index-common-runtime.tar
+  - name: kogito-addons-quarkus-data-index-common-deployment.tar
+    path: ./kogito-addons-quarkus-data-index-common-deployment.tar
 execute:
   - script: configure

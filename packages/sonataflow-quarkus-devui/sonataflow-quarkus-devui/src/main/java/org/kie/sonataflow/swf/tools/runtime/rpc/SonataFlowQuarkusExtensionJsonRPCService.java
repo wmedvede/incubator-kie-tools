@@ -54,6 +54,8 @@ public class SonataFlowQuarkusExtensionJsonRPCService {
 
     @PostConstruct
     public void init() {
+        System.out.println("999XXXXXXXXXXX  Starting sonataflow quarkus dev ui");
+        //http://greeting.test1
         Optional<String> dataIndexURL = ConfigProvider.getConfig().getOptionalValue(DATA_INDEX_URL, String.class);
         dataIndexURL.ifPresent(this::initDataIndexWebClient);
     }
