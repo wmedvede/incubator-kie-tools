@@ -27,6 +27,7 @@ import java.util.Optional;
 
 import io.quarkus.deployment.Capabilities;
 import io.quarkus.devui.spi.JsonRPCProvidersBuildItem;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.kie.sonataflow.swf.tools.runtime.config.DevUIStaticArtifactsRecorder;
 
 import io.quarkus.deployment.IsDevelopment;
@@ -53,6 +54,8 @@ public class DevConsoleProcessor {
 
     private static final String STATIC_RESOURCES_PATH = "dev-static/";
     private static final String BASE_RELATIVE_URL = "/q/dev-ui/org.apache.kie.sonataflow.sonataflow-quarkus-devui";
+
+    private static final String LOCAL_DEVELOPMENT = "kie.tools.localDevelopment";
 
     @BuildStep(onlyIf = IsDevelopment.class)
     @Record(ExecutionTime.RUNTIME_INIT)
@@ -90,6 +93,15 @@ public class DevConsoleProcessor {
     @BuildStep(onlyIf = IsDevelopment.class)
     public JsonRPCProvidersBuildItem createJsonRPCServiceForJBPMDevUi() {
         return new JsonRPCProvidersBuildItem(SonataFlowQuarkusExtensionJsonRPCService.class);
+    }
+
+    @BuildStep(onlyIf = IsDevelopment.class)
+    public void buildLocalDevelopmentSystemProperty(BuildProducer<SystemPropertyBuildItem> systemProperties) {
+        boolean localDevelopment = ConfigProvider.getConfig().getOptionalValue(LOCAL_DEVELOPMENT, Boolean.class).orElse(false);
+        System.out.println("6XXXXXXXXXXXXXXXXXXXXXXXXXX localDevelopment: " + localDevelopment);
+        if (localDevelopment) {
+            systemProperties.produce(new SystemPropertyBuildItem(LOCAL_DEVELOPMENT, "true"));
+        }
     }
 
     @BuildStep(onlyIf = IsDevelopment.class)
