@@ -34,5 +34,9 @@ mkdir -p "${KOGITO_HOME}"/.m2/repository/org/kie/
 tar xf /tmp/artifacts/sonataflow-quarkus-devui-maven-repo.tar -C "${KOGITO_HOME}"/.m2/repository/org/apache/kie/
 tar xf /tmp/artifacts/kie-tools-maven-base-maven-repo.tar -C "${KOGITO_HOME}"/.m2/repository/org/kie/
 
+# WM, add modules manually to be able to use the bits in main local build, otherwise they are taken from the apache maven repo
+tar xf /tmp/artifacts/kogito-addons-quarkus-data-index-common-runtime.tar -C "${KOGITO_HOME}"/.m2/repository/org/kie/
+tar xf /tmp/artifacts/kogito-addons-quarkus-data-index-common-deployment.tar -C "${KOGITO_HOME}"/.m2/repository/org/kie/
+
 find "${KOGITO_HOME}"/.m2/repository -name _remote.repositories | xargs rm
 
