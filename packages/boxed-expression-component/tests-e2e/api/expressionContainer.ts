@@ -132,6 +132,10 @@ export class ContextMenu {
     await this.locator.nth(0).click({ button: "right" });
   }
 
+  public async availableOptions() {
+    return this.locator.page().getByTestId("kie-tools--bee--context-menu-container").getByRole("menuitem");
+  }
+
   public heading(sectionName: string) {
     return this.locator.page().getByRole("heading", { name: sectionName });
   }
@@ -165,10 +169,15 @@ export class ChildExpression {
     private locator: Locator,
     monaco: Monaco
   ) {
-    this._expression = new ExpressionContainer(
-      this.locator.getByTestId("kie-tools--bee--expression-container").nth(0),
-      monaco
-    );
+    this._expression = new ExpressionContainer(this.elementCell, monaco);
+  }
+
+  public async hover() {
+    await this.elementCell.hover();
+  }
+
+  get elementCell() {
+    return this.locator.getByTestId("kie-tools--bee--expression-container").nth(0);
   }
 
   get expression() {
@@ -176,7 +185,7 @@ export class ChildExpression {
   }
 
   get selectExpressionMenu() {
-    return new SelectExpressionMenu(this.locator.getByTestId("kie-tools--bee--expression-container").nth(0));
+    return new SelectExpressionMenu(this.elementCell);
   }
 
   get contextMenu() {

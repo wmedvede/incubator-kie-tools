@@ -62,7 +62,7 @@ export function ConditionalExpression({
   parentElementId: string;
 }) {
   const { i18n } = useBoxedExpressionEditorI18n();
-  const { expressionHolderId, widthsById } = useBoxedExpressionEditor();
+  const { expressionHolderId, widthsById, isReadOnly } = useBoxedExpressionEditor();
   const { setExpression } = useBoxedExpressionEditorDispatch();
 
   const tableRows = useMemo<ROWTYPE[]>(() => {
@@ -228,8 +228,10 @@ export function ConditionalExpression({
 
   return (
     <NestedExpressionContainerContext.Provider value={nestedExpressionContainerValue}>
-      <div>
+      <div data-testid={"kie-tools--boxed-expression-component---conditional"}>
         <BeeTable<ROWTYPE>
+          isReadOnly={isReadOnly}
+          isEditableHeader={!isReadOnly}
           resizerStopBehavior={ResizerStopBehavior.SET_WIDTH_WHEN_SMALLER}
           tableId={id}
           headerLevelCountForAppendingRowIndexColumn={1}
