@@ -44,6 +44,7 @@ import { buildFeelQNameFromNamespace } from "../feel/buildFeelQName";
 import { Alert, AlertVariant } from "@patternfly/react-core/dist/js/components/Alert/Alert";
 import { Normalized } from "../normalization/normalize";
 import { generateUuid } from "@kie-tools/boxed-expression-component/dist/api";
+import { useSettings } from "../settings/DmnEditorSettingsContext";
 
 export type AllKnownDrgElementsByHref = Map<
   string,
@@ -61,6 +62,7 @@ export function DecisionServiceProperties({
   index: number;
 }) {
   const { setState } = useDmnEditorStoreApi();
+  const settings = useSettings();
 
   const thisDmn = useDmnEditorStore((s) => s.dmn);
   const { externalModelsByNamespace } = useExternalModels();
@@ -91,7 +93,7 @@ export function DecisionServiceProperties({
   }, [externalDmnsByNamespace, thisDmn]);
 
   const thisDmnsNamespace = useDmnEditorStore((s) => s.dmn.model.definitions["@_namespace"]);
-  const isReadonly = !!namespace && namespace !== thisDmnsNamespace;
+  const isReadOnly = settings.isReadOnly || (!!namespace && namespace !== thisDmnsNamespace);
 
   const { dmnEditorRootElementRef } = useDmnEditor();
 
@@ -105,7 +107,7 @@ export function DecisionServiceProperties({
           isPlain={false}
           id={decisionService["@_id"]!}
           name={decisionService["@_name"]}
-          isReadonly={isReadonly}
+          isReadOnly={isReadOnly}
           shouldCommitOnBlur={true}
           className={"pf-c-form-control"}
           onRenamed={(newName) => {
@@ -125,7 +127,7 @@ export function DecisionServiceProperties({
         <TypeRefSelector
           heightRef={dmnEditorRootElementRef}
           typeRef={resolvedTypeRef}
-          isDisabled={isReadonly}
+          isDisabled={isReadOnly}
           onChange={(newTypeRef) => {
             setState((state) => {
               const drgElement = state.dmn.model.definitions.drgElement![index] as Normalized<DMN15__tDecisionService>;
@@ -140,7 +142,7 @@ export function DecisionServiceProperties({
         <TextArea
           aria-label={"Description"}
           type={"text"}
-          isDisabled={isReadonly}
+          isDisabled={isReadOnly}
           value={decisionService.description?.__$$text}
           onChange={(newDescription) => {
             setState((state) => {
@@ -161,14 +163,17 @@ export function DecisionServiceProperties({
         </ClipboardCopy>
       </FormGroup>
 
-      <FormGroup label="Output decisions">
+      <FormGroup label="Output decisions" data-testid={"kie-tools--dmn-editor--decision-service-output-decisions"}>
         <DecisionServiceElementList
           decisionServiceNamespace={namespace}
           elements={decisionService.outputDecision}
           allDrgElementsByHref={allDrgElementsByHref}
         />
       </FormGroup>
-      <FormGroup label="Encapsulated decisions">
+      <FormGroup
+        label="Encapsulated decisions"
+        data-testid={"kie-tools--dmn-editor--decision-service-encapsulated-decisions"}
+      >
         <DecisionServiceElementList
           decisionServiceNamespace={namespace}
           elements={decisionService.encapsulatedDecision}
@@ -177,7 +182,7 @@ export function DecisionServiceProperties({
       </FormGroup>
 
       <Divider />
-      <FormGroup label="Input decisions">
+      <FormGroup label="Input decisions" data-testid={"kie-tools--dmn-editor--decision-service-input-decisions"}>
         <DraggableDecisionServiceElementList
           decisionServiceNamespace={namespace}
           elements={decisionService.inputDecision}
@@ -188,10 +193,10 @@ export function DecisionServiceProperties({
                 newInputDecisions;
             });
           }}
-          isDisabled={isReadonly}
+          isDisabled={isReadOnly}
         />
       </FormGroup>
-      <FormGroup label="Input data">
+      <FormGroup label="Input data" data-testid={"kie-tools--dmn-editor--decision-service-input-data"}>
         <DraggableDecisionServiceElementList
           decisionServiceNamespace={namespace}
           elements={decisionService.inputData}
@@ -202,7 +207,7 @@ export function DecisionServiceProperties({
                 newInputData;
             });
           }}
-          isDisabled={isReadonly}
+          isDisabled={isReadOnly}
         />
       </FormGroup>
 
@@ -213,7 +218,7 @@ export function DecisionServiceProperties({
       />
 
       <DocumentationLinksFormGroup
-        isReadonly={isReadonly}
+        isReadOnly={isReadOnly}
         values={decisionService.extensionElements?.["kie:attachment"]}
         onChange={(newExtensionElements) => {
           setState((state) => {
@@ -435,7 +440,7 @@ function DecisionServiceEquivalentFunction({
 
   return (
     <Alert variant={AlertVariant.info} isInline title="Invoking this Decision Service in FEEL">
-      <p style={{ fontFamily: "monospace" }}>
+      <p data-testid={"kie-tools--dmn-editor--decision-service-feel"} style={{ fontFamily: "monospace" }}>
         {`${decisionService["@_name"]}(${buildFunctionArgList(
           decisionService.inputDecision,
           decisionService.inputData

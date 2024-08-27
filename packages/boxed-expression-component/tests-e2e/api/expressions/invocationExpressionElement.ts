@@ -32,6 +32,10 @@ export class InvocationExpressionElement {
     return new InvocationParameter(this.locator.getByTestId(`kie-tools--bee--expression-row-${index}`), this.monaco);
   }
 
+  get invokedFunctionNameCell() {
+    return this.locator.getByTestId(`kie-tools--bee--table-header-invokedFunctionName`);
+  }
+
   get expressionHeaderCell() {
     return new NameAndDataTypeCell(this.locator.getByRole("columnheader"));
   }
@@ -99,5 +103,9 @@ class InvocationParameter {
 
   get descriptionCell() {
     return new NameAndDataTypeCell(this.locator.getByTestId(`kie-tools--bee--expression-column-1`).nth(0));
+  }
+
+  get elementCell() {
+    return this.expressionElement.elementCell;
   }
 }
