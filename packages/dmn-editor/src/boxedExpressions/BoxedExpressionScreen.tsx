@@ -89,18 +89,17 @@ export function BoxedExpressionScreen({ container }: { container: React.RefObjec
   const dmnEditorStoreApi = useDmnEditorStoreApi();
 
   const thisDmn = useDmnEditorStore((s) => s.dmn);
-  const diagram = useDmnEditorStore((s) => s.diagram);
 
   const activeDrgElementId = useDmnEditorStore((s) => s.boxedExpressionEditor.activeDrgElementId);
   const isPropertiesPanelOpen = useDmnEditorStore((s) => s.boxedExpressionEditor.propertiesPanel.isOpen);
 
   const externalDmnsByNamespace = useDmnEditorStore(
-    (s) => s.computed(s).getExternalModelTypesByNamespace(externalModelsByNamespace).dmns
+    (s) => s.computed(s).getDirectlyIncludedExternalModelsByNamespace(externalModelsByNamespace).dmns
   );
   const dataTypesTree = useDmnEditorStore((s) => s.computed(s).getDataTypes(externalModelsByNamespace).dataTypesTree);
   const importsByNamespace = useDmnEditorStore((s) => s.computed(s).importsByNamespace());
   const externalPmmlsByNamespace = useDmnEditorStore(
-    (s) => s.computed(s).getExternalModelTypesByNamespace(externalModelsByNamespace).pmmls
+    (s) => s.computed(s).getDirectlyIncludedExternalModelsByNamespace(externalModelsByNamespace).pmmls
   );
   const isAlternativeInputDataShape = useDmnEditorStore((s) => s.computed(s).isAlternativeInputDataShape());
   const drdIndex = useDmnEditorStore((s) => s.computed(s).getDrdIndex());
