@@ -50,6 +50,8 @@ import WorkflowDetailsTimelinePanel from "../WorkflowDetailsTimelinePanel/Workfl
 import SwfCombinedEditor from "../SwfCombinedEditor/SwfCombinedEditor";
 import { Job, WorkflowInstance, WorkflowInstanceState } from "@kie-tools/runtime-tools-swf-gateway-api/dist/types";
 
+const SWFCOMBINEDEDITOR_WIDTH = 1000;
+
 interface WorkflowDetailsProps {
   isEnvelopeConnectedToChannel: boolean;
   driver: WorkflowDetailsDriver;
@@ -218,7 +220,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ isEnvelopeConnectedTo
     return (
       <Flex>
         <FlexItem>
-          <SwfCombinedEditor height={1000} width={1000} workflowInstance={data} />
+          <SwfCombinedEditor height={1000} width={SWFCOMBINEDEDITOR_WIDTH} workflowInstance={data} />
         </FlexItem>
       </Flex>
     );
@@ -250,7 +252,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ isEnvelopeConnectedTo
   const renderWorkflowVariables = (): JSX.Element => {
     return (
       <Flex direction={{ default: "column" }} flex={{ default: "flex_1" }}>
-        {Object.keys(updateJson).length > 0 && (
+        {updateJson && Object.keys(updateJson).length > 0 && (
           <FlexItem>
             <WorkflowVariables
               displayLabel={displayLabel}
@@ -270,7 +272,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ isEnvelopeConnectedTo
     return (
       <Flex direction={{ default: "column" }}>
         {renderSwfDiagram()}
-        <Flex>
+        <Flex style={{ width: `${SWFCOMBINEDEDITOR_WIDTH}px` }}>
           {renderWorkflowDetails()}
           {renderWorkflowVariables()}
         </Flex>

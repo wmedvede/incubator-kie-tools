@@ -17,14 +17,25 @@
  * under the License.
  */
 
-const buildEnv = require("./env");
-const { setup } = require("@kie-tools/maven-config-setup-helper");
+const { env } = require("./env");
+const {
+  setupMavenConfigFile,
+  buildTailFromPackageJsonDependencies,
+  DEFAULT_LOCAL_REPO,
+} = require("@kie-tools/maven-base");
 
-setup(`
-    -Drevision=${buildEnv.env.swfDiagramEditor.version}
-    -Duberfire.version=${buildEnv.env.swfDiagramEditor.UBERFIRE__version}
-    -Dfont_awesome.version=${buildEnv.env.swfDiagramEditor.FONT_AWESOME__version}
-    -Dgwtbootstrap3.version=${buildEnv.env.swfDiagramEditor.GWTBOOTSTRAP3__version}
-    -Dbootstrap.version=${buildEnv.env.swfDiagramEditor.BOOTSTRAP__version}
-    -Danimate_css.version=${buildEnv.env.swfDiagramEditor.ANIMATE_CSS__version}
-`);
+setupMavenConfigFile(
+  `
+    --batch-mode
+    -Dstyle.color=always
+    -Drevision=${env.swfDiagramEditor.version}
+    -Dmaven.repo.local.tail=${buildTailFromPackageJsonDependencies()},${DEFAULT_LOCAL_REPO} 
+    -Drevision=${env.swfDiagramEditor.version}
+    -Duberfire.version=${env.swfDiagramEditor.UBERFIRE__version}
+    -Dfont_awesome.version=${env.swfDiagramEditor.FONT_AWESOME__version}
+    -Dgwtbootstrap3.version=${env.swfDiagramEditor.GWTBOOTSTRAP3__version}
+    -Dbootstrap.version=${env.swfDiagramEditor.BOOTSTRAP__version}
+    -Danimate_css.version=${env.swfDiagramEditor.ANIMATE_CSS__version}
+    `, // For some reason, j2cl-maven-plugin needs the DEFAULT_LOCAL_REPO here as the last tail too.
+  { ignoreDefault: true } // Default <repositories> configuration doesn't work for this module. Since this module is not going to last long, we rely on this workaround for a while.
+);
