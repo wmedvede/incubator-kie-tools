@@ -84,4 +84,7 @@ jobs:
               > [!WARNING] \n \
               > Please don't merge using squash, not to lose the git history.<br /><br />\
               [View Action](${runUrl})"
-          gh pr create --title "${prTitle}" --body "${prBody}" --base main
+          if [[ -n "${{ vars.SYNC_REVIEWERS }}" ]]; then
+            reviewersOption="--reviewer ${{ vars.SYNC_REVIEWERS }}"
+          fi
+          gh pr create --title "${prTitle}" --body "${prBody}" --repo kubesmarts/kie-tools --base main $reviewersOption
