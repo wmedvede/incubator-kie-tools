@@ -10,13 +10,14 @@ env:
   IGNORED_FILES: "${{ vars.IGNORED_FILES }}"
   SYNC_BRANCH: "main-sync-$(date +'%Y%m%d-%H%M%S')"
   GITHUB_TOKEN: ${{ secrets.KIE1_TOKEN }}
-  
+
 jobs:
   sync_main_apache:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
+        id: checkout_pr
         uses: actions/checkout@v3
         with:
           ref: main # Check out the "main" branch in your fork
@@ -31,6 +32,18 @@ jobs:
         run: |
           git config --global user.name "${{ secrets.KIE1_USER_NAME }}"
           git config --global user.email "${{ secrets.KIE1_EMAIL }}"
+
+      # align these versions with ci_build.yml
+      - name: "Setup pnpm"
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.3.0
+
+      # align these versions with ci_build.yml
+      - name: "Setup Node"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.14.0
 
       - name: Create Sync Branch
         run: |
@@ -68,6 +81,44 @@ jobs:
       - name: Bootstrap (Regenerate Dependencies)
         run: pnpm bootstrap --no-frozen-lockfile
 
+      - name: "Setup build mode {none,full,partial}"
+        id: setup_build_mode
+        shell: bash
+        run: |
+
+          npm -g install bun@1.1.6 turbo@2.1.2
+
+          echo '{}' > turbo.json
+
+          turbo telemetry disable
+
+          bun ./.github/supporting-files/ci/build-partitioning/build_partitioning.ts \
+            --outputPath='/tmp/partitions.json' \
+            --forceFull='true' \
+            --baseSha='${{ steps.checkout_pr.outputs.base_sha }}' \
+            --headSha='${{steps.checkout_pr.outputs.head_sha }}' \
+            --graphJsonPath='./repo/graph.json' \
+            --partition='./.github/supporting-files/ci/partitions/partition0.txt'
+
+          npm -g uninstall bun turbo
+
+          rm turbo.json
+
+          echo "fullBuildPnpmFilterString=$(jq --raw-output '.[0].fullBuildPnpmFilterString' /tmp/partitions.json)" >> $GITHUB_OUTPUT
+          echo "Done."
+
+      - name: "FULL → Build"
+        shell: bash
+        env:
+          KIE_TOOLS_BUILD__runTests: "false"
+          KIE_TOOLS_BUILD__runEndToEndTests: "false"
+          KIE_TOOLS_BUILD__buildContainerImages: "true"
+          KIE_TOOLS_BUILD__ignoreTestFailures: "true"
+          KIE_TOOLS_BUILD__ignoreEndToEndTestFailures: "true"
+          NODE_OPTIONS: "--max_old_space_size=4096"
+        run: >-
+          eval "pnpm ${{ steps.setup_build_mode.outputs.fullBuildPnpmFilterString }} --workspace-concurrency=1 build:prod"
+
       - name: Commit and Push Changes to Sync Branch
         run: |
           git add .
@@ -76,15 +127,14 @@ jobs:
 
       - name: Create Pull Request
         shell: bash
+        env:
+          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: |
           set -x
-          runUrl="${{github.server_url}}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          prTitle="Automatic PR: Sync main with main-apache"
-          prBody="This pull request has been created by a GitHub workflow to synchronize the main branch with Apache upstream/main.<br /><br />\
-              > [!WARNING] \n \
-              > Please don't merge using squash, not to lose the git history.<br /><br />\
-              [View Action](${runUrl})"
+          # Use double quotes for variable substitution in sed
+          sed "s|\\\$RUN_URL|${RUN_URL}|g" .github/supporting-files/ci/templates/osl_sync_pr_template.md > temp.md
+          prTitle="[$(date +'%Y%m%d-%H%M%S')] - Automatic PR: Sync main with main-apache"
           if [[ -n "${{ vars.SYNC_REVIEWERS }}" ]]; then
             reviewersOption="--reviewer ${{ vars.SYNC_REVIEWERS }}"
           fi
-          gh pr create --title "${prTitle}" --body "${prBody}" --repo kubesmarts/kie-tools --base main $reviewersOption
+          gh pr create --title "${prTitle}" --body-file temp.md --repo kubesmarts/kie-tools --base main $reviewersOption
