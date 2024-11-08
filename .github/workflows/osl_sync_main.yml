@@ -10,6 +10,8 @@ env:
   IGNORED_FILES: "${{ vars.IGNORED_FILES }}"
   SYNC_BRANCH: "main-sync-$(date +'%Y%m%d-%H%M%S')"
   GITHUB_TOKEN: ${{ secrets.KIE1_TOKEN }}
+  # packages in partition0.txt
+  PNPM_FILTER: "-F '@kie-tools/kn-plugin-workflow...' -F '@osl/osl-data-index-ephemeral-image...' -F '@osl/osl-data-index-postgresql-image...' -F '@osl/osl-jobs-service-ephemeral-image...' -F '@osl/osl-jobs-service-postgresql-image...' -F '@osl/osl-management-console-image...' -F '@osl/osl-swf-builder-image...' -F '@osl/osl-swf-devmode-image...'"
 
 jobs:
   sync_main_apache:
@@ -20,7 +22,7 @@ jobs:
         id: checkout_pr
         uses: actions/checkout@v3
         with:
-          ref: main # Check out the "main" branch in your fork
+          ref: main
 
       - name: Add Upstream Remote
         run: |
@@ -32,18 +34,6 @@ jobs:
         run: |
           git config --global user.name "${{ secrets.KIE1_USER_NAME }}"
           git config --global user.email "${{ secrets.KIE1_EMAIL }}"
-
-      # align these versions with ci_build.yml
-      - name: "Setup pnpm"
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9.3.0
-
-      # align these versions with ci_build.yml
-      - name: "Setup Node"
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.14.0
 
       - name: Create Sync Branch
         run: |
@@ -81,32 +71,6 @@ jobs:
       - name: Bootstrap (Regenerate Dependencies)
         run: pnpm bootstrap --no-frozen-lockfile
 
-      - name: "Setup build mode {none,full,partial}"
-        id: setup_build_mode
-        shell: bash
-        run: |
-
-          npm -g install bun@1.1.6 turbo@2.1.2
-
-          echo '{}' > turbo.json
-
-          turbo telemetry disable
-
-          bun ./.github/supporting-files/ci/build-partitioning/build_partitioning.ts \
-            --outputPath='/tmp/partitions.json' \
-            --forceFull='true' \
-            --baseSha='${{ steps.checkout_pr.outputs.base_sha }}' \
-            --headSha='${{steps.checkout_pr.outputs.head_sha }}' \
-            --graphJsonPath='./repo/graph.json' \
-            --partition='./.github/supporting-files/ci/partitions/partition0.txt'
-
-          npm -g uninstall bun turbo
-
-          rm turbo.json
-
-          echo "fullBuildPnpmFilterString=$(jq --raw-output '.[0].fullBuildPnpmFilterString' /tmp/partitions.json)" >> $GITHUB_OUTPUT
-          echo "Done."
-
       - name: "FULL → Build"
         shell: bash
         env:
@@ -117,7 +81,7 @@ jobs:
           KIE_TOOLS_BUILD__ignoreEndToEndTestFailures: "true"
           NODE_OPTIONS: "--max_old_space_size=4096"
         run: >-
-          eval "pnpm ${{ steps.setup_build_mode.outputs.fullBuildPnpmFilterString }} --workspace-concurrency=1 build:prod"
+          eval "pnpm ${{ env.PNPM_FILTER }} --workspace-concurrency=1 build:prod"
 
       - name: Commit and Push Changes to Sync Branch
         run: |
