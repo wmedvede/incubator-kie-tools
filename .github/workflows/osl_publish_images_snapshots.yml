@@ -56,5 +56,5 @@ jobs:
         run: |
           for image in ${{ vars.PUBLISH_IMAGES_LIST }}; do
             echo "Pushing $image to Quay"
-            docker push quay.io/kubesmarts/$image:latest || { echo "Failed to push $image"; exit 1; }
+            docker push quay.io/kubesmarts/$image:main || { echo "Failed to push $image"; exit 1; }
           done
