@@ -3,9 +3,6 @@ name: "CI :: OSL :: Publish Images Snapshots"
 on:
   workflow_dispatch:
 
-env:
-  PNPM_FILTER: "-F '@kie-tools/sonataflow-devmode-image...' -F '@kie-tools/sonataflow-management-console-image...' -F '@kie-tools/sonataflow-builder-image...' -F '@kie/kogito-data-index-ephemeral-image...' -F '@kie/kogito-data-index-postgresql-image...' -F '@kie/kogito-jobs-service-ephemeral-image...' -F '@kie/kogito-jobs-service-postgresql-image...'"
-
 jobs:
   publish_images_snapshots:
     runs-on: ubuntu-latest
@@ -22,7 +19,7 @@ jobs:
           PLAYWRIGHT_BASE__installDeps: "true"
         uses: ./.github/actions/bootstrap
         with:
-          pnpm_filter_string: ${{ env.PNPM_FILTER }}
+          pnpm_filter_string: ${{ vars.IMAGES_UPSTREAM_PNPM_FILTER }}
 
       - name: "Build Images"
         env:
@@ -46,14 +43,18 @@ jobs:
           KOGITO_JOBS_SERVICE_POSTGRESQL_IMAGE__account: "kubesmarts"
 
         run: >-
-          eval "pnpm ${{ env.PNPM_FILTER }} --workspace-concurrency=1 build:prod"
+          eval "pnpm ${{ env.IMAGES_UPSTREAM_PNPM_FILTER }} --workspace-concurrency=1 build:prod"
 
       - name: "Login to Quay"
-        run: echo "${{ secrets.QUAY_KUBESMARTS_PASSWORD }}" | docker login -u="${{ secrets.QUAY_KUBESMARTS_USER }}" --password-stdin quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_ROBOT_ACCOUNT }}
+          password: ${{ secrets.QUAY_ROBOT_TOKEN }}
 
       - name: "Push Images to Quay"
         run: |
-          for image in incubator-kie-sonataflow-devmode-image incubator-kie-sonataflow-management-console-image incubator-kie-sonataflow-builder-image incubator-kie-kogito-data-index-ephemeral-image incubator-kie-kogito-data-index-postgresql-image incubator-kie-kogito-jobs-service-ephemeral-image incubator-kie-kogito-jobs-service-postgresql-image; do
+          for image in ${{ vars.PUBLISH_IMAGES_LIST }}; do
             echo "Pushing $image to Quay"
             docker push quay.io/kubesmarts/$image:latest || { echo "Failed to push $image"; exit 1; }
           done
