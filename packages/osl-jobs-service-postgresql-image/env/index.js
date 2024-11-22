@@ -20,9 +20,10 @@
 const { varsWithName, composeEnv, getOrDefault } = require("@kie-tools-scripts/build-env");
 
 const rootEnv = require("@kie-tools/root-env/env");
+const sonataflowImageCommonEnv = require("@kie-tools/sonataflow-image-common/env");
 const redHatEnv = require("@osl/redhat-env/env");
 
-module.exports = composeEnv([rootEnv, redHatEnv], {
+module.exports = composeEnv([rootEnv, sonataflowImageCommonEnv, redHatEnv], {
   vars: varsWithName({
     OSL_JOBS_SERVICE_POSTGRESQL_IMAGE__artifactUrl: {
       default: "",
