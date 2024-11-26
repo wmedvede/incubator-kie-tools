@@ -43,6 +43,8 @@ jobs:
           KOGITO_JOBS_SERVICE_POSTGRESQL_IMAGE__account: "kubesmarts"
           SERVERLESS_LOGIC_WEB_TOOLS__swfDevModeImageRegistry: "quay.io"
           SERVERLESS_LOGIC_WEB_TOOLS__swfDevModeImageAccount: "kubesmarts"
+          SONATAFLOW_OPERATOR__registry: "quay.io"
+          SONATAFLOW_OPERATOR__account: "kubesmarts"
 
         run: >-
           eval "pnpm ${{ vars.IMAGES_UPSTREAM_PNPM_FILTER }} --workspace-concurrency=1 build:prod"
