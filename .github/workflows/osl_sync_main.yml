@@ -17,8 +17,8 @@ jobs:
   sync_main_apache:
     runs-on: ubuntu-latest
 
-    permissions:      
-      contents: write   # This grants write access to repository contents (push, create branches)
+    permissions:
+      contents: write # This grants write access to repository contents (push, create branches)
 
     steps:
       - name: Checkout Repository
