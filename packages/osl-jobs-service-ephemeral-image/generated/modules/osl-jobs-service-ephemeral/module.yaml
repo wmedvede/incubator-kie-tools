@@ -21,10 +21,9 @@ name: com.redhat.osl.jobs-service-ephemeral
 version: "main"
 
 artifacts:
-  - name: jobs-service-inmemory
-    description: "jobs-service-inmemory-9.102.0.redhat-00004-image-build.zip"
+  - name: jobs-service-inmemory-image-build.zip
+    description: "jobs-service-inmemory-9.102.0.redhat-00004-image-build"
     md5: "ad090d1f9f12dde67f8022aaeb68d745"
-    target: jobs-service-inmemory-image-build.zip
 
 packages:
   install:
