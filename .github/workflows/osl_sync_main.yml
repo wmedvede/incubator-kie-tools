@@ -67,7 +67,7 @@ jobs:
           git checkout upstream/main -- pnpm-lock.yaml repo/graph.*
           pnpm bootstrap --no-frozen-lockfile
           git add .
-          git merge --continue --no-edit
+          git merge --strategy-option=theirs --no-edit
 
       - name: Run Bootstrap (No Conflicts)
         if: env.MERGE_RESULT == 'SUCCESS'
