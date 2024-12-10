@@ -36,6 +36,9 @@ jobs:
           git config --global user.name "${{ secrets.KIE1_USER_NAME }}"
           git config --global user.email "${{ secrets.KIE1_EMAIL }}"
 
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
       - name: Create Sync Branch
         run: |
           SYNC_BRANCH="main-sync-$(date +'%Y%m%d-%H%M%S')"
@@ -70,6 +73,18 @@ jobs:
         if: env.MERGE_RESULT == 'SUCCESS'
         run: |
           pnpm bootstrap --no-frozen-lockfile
+
+      - name: "Run Build"
+        shell: bash
+        env:
+          KIE_TOOLS_BUILD__runTests: "false"
+          KIE_TOOLS_BUILD__runEndToEndTests: "false"
+          KIE_TOOLS_BUILD__buildContainerImages: "true"
+          KIE_TOOLS_BUILD__ignoreTestFailures: "true"
+          KIE_TOOLS_BUILD__ignoreEndToEndTestFailures: "true"
+          NODE_OPTIONS: "--max_old_space_size=4096"
+        run: >-
+          eval "pnpm ${{ env.PNPM_FILTER }} --workspace-concurrency=1 build:prod"
 
       - name: Capture Uncommitted Changes
         id: capture_changes
