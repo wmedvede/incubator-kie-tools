@@ -29,7 +29,7 @@ jobs:
       - name: Add Upstream Remote
         run: |
           git remote add upstream $UPSTREAM_URL
-          git fetch upstream main
+          git fetch upstream main --depth=0
 
       - name: Setup Git Environment
         run: |
@@ -41,11 +41,13 @@ jobs:
           SYNC_BRANCH="main-sync-$(date +'%Y%m%d-%H%M%S')"
           echo "SYNC_BRANCH=$SYNC_BRANCH" >> $GITHUB_ENV
           git checkout -b $SYNC_BRANCH
+          git merge-base HEAD upstream/main
+          git show $(git merge-base HEAD upstream/main)
 
       - name: Attempt Merge with Upstream
         id: merge
         run: |
-          git merge upstream/main --no-edit --allow-unrelated-histories  || echo "CONFLICT" > merge_result.txt
+          git merge upstream/main --no-edit || echo "CONFLICT" > merge_result.txt
 
       - name: Check for Merge Conflicts
         id: check_conflicts
