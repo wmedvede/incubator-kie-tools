@@ -20,16 +20,16 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.KOGITO_VERSION }}" ]; then
             echo "KOGITO_RUNTIME_version=${{ github.event.inputs.KOGITO_VERSION }}" >> $GITHUB_ENV
-            echo "IMAGE_TAG=${{ github.event.inputs.KOGITO_VERSION }}" >> $GITHUB_ENV
+            echo "OSL_IMAGE_TAG=${{ github.event.inputs.KOGITO_VERSION }}" >> $GITHUB_ENV
           else
-            echo "IMAGE_TAG=main" >> $GITHUB_ENV
+            echo "OSL_IMAGE_TAG=main" >> $GITHUB_ENV
             echo "No KOGITO_VERSION input provided. Keeping the default or existing behavior."
           fi
 
       - name: "Verify Exported Variables"
         run: |
           echo "KOGITO_RUNTIME_version: $KOGITO_RUNTIME_version"
-          echo "IMAGE_TAG: $IMAGE_TAG"
+          echo "OSL_IMAGE_TAG: $OSL_IMAGE_TAG"
 
       - name: "Setup environment"
         uses: ./.github/actions/setup-env
@@ -81,12 +81,12 @@ jobs:
           for image in ${{ vars.PUBLISH_IMAGES_LIST }}; do
             echo "Pushing $image to Quay"
 
-            if [ "${{ env.IMAGE_TAG }}" = "main" ]; then
-              echo "IMAGE_TAG is 'main'. Pushing main tag."
+            if [ "${{ env.OSL_IMAGE_TAG }}" = "main" ]; then
+              echo "OSL_IMAGE_TAG is 'main'. Pushing main tag."
               docker push quay.io/kubesmarts/$image:main || { echo "Failed to push $image:main"; exit 1; }
             else
-              echo "IMAGE_TAG is not 'main'. Tagging and pushing snapshot."
-              docker tag quay.io/kubesmarts/$image:main quay.io/kubesmarts/$image:${{ env.IMAGE_TAG }}
-              docker push quay.io/kubesmarts/$image:${{ env.IMAGE_TAG }} || { echo "Failed to push $image with tag $IMAGE_TAG to Quay"; exit 1; }
+              echo "OSL_IMAGE_TAG is not 'main'. Tagging and pushing snapshot."
+              docker tag quay.io/kubesmarts/$image:main quay.io/kubesmarts/$image:${{ env.OSL_IMAGE_TAG }}
+              docker push quay.io/kubesmarts/$image:${{ env.OSL_IMAGE_TAG }} || { echo "Failed to push $image with tag $OSL_IMAGE_TAG to Quay"; exit 1; }
             fi
           done
