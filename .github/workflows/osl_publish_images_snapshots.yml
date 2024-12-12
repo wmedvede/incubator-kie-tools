@@ -22,7 +22,7 @@ jobs:
             echo "KOGITO_RUNTIME_version=${{ github.event.inputs.KOGITO_VERSION }}" >> $GITHUB_ENV
             echo "IMAGE_TAG=${{ github.event.inputs.KOGITO_VERSION }}" >> $GITHUB_ENV
           else
-            echo "IMAGE_TAG=main"
+            echo "IMAGE_TAG=main" >> $GITHUB_ENV
             echo "No KOGITO_VERSION input provided. Keeping the default or existing behavior."
           fi
 
