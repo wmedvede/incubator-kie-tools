@@ -89,8 +89,8 @@ jobs:
         id: capture_changes
         run: |
           SYNC_CHANGES=$(git status --porcelain)
-          echo "SYNC_CHANGES=${SYNC_CHANGES}" >> $GITHUB_ENV
-          if [ -n "$SYNC_CHANGES" ]; then
+          echo "$SYNC_CHANGES" > /tmp/sync_changes.txt
+          if [ -s /tmp/sync_changes.txt ]; then
             echo "HAS_CHANGES=true" >> $GITHUB_ENV
           else
             echo "HAS_CHANGES=false" >> $GITHUB_ENV
@@ -110,15 +110,18 @@ jobs:
         run: |
           echo "No conflicts or changes detected. Pushing merged branch."
           git push -u origin "${{ env.SYNC_BRANCH }}"
-          echo "SYNC_CHANGES=No conflicts or changes detected." >> $GITHUB_ENV
+          echo "No conflicts or changes detected." > /tmp/sync_changes.txt
 
       - name: Create Pull Request
         env:
           RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: |
           set -x
+          SYNC_CHANGES=$(cat /tmp/sync_changes.txt)
+          ESCAPED_CHANGES=$(echo "$SYNC_CHANGES" | sed -e ':a' -e 'N' -e '$!ba' -e 's|\n|\\n|g' -e 's|/|\\/|g')
+          
           # Use double quotes for variable substitution in sed
-          sed -e "s|\\\$RUN_URL|${RUN_URL}|g" -e "s|\\\$SYNC_CHANGES|${SYNC_CHANGES}|g" .github/supporting-files/ci/templates/osl_sync_pr_template.md > temp.md
+          sed -e "s|\\\$RUN_URL|${RUN_URL}|g" -e "s|\\\$SYNC_CHANGES|${ESCAPED_CHANGES}|g" .github/supporting-files/ci/templates/osl_sync_pr_template.md > temp.md
 
           prTitle="[$(date +'%Y-%m-%d:%H%M%S')] - :robot: Automated PR: Sync main with upstream"
           reviewersOption=""
