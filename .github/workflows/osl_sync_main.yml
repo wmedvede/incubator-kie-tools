@@ -102,7 +102,6 @@ jobs:
           echo "Changes detected. Committing and pushing..."
           git add .
           git commit -m "Sync with upstream/main and resolved conflicts"
-          git merge --strategy-option=theirs --no-edit
           git push -u origin "${{ env.SYNC_BRANCH }}"
 
       - name: Push Changes (No Conflict or Changes)
