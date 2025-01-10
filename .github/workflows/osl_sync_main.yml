@@ -117,10 +117,19 @@ jobs:
         run: |
           set -x
           SYNC_CHANGES=$(cat /tmp/sync_changes.txt)
-          ESCAPED_CHANGES=$(echo "$SYNC_CHANGES" | sed -e ':a' -e 'N' -e '$!ba' -e 's|\n|\\n|g' -e 's|/|\\/|g')
+
+          # Truncate SYNC_CHANGES to 5000 
+          MAX_CHARS=5000
+          if [ ${#SYNC_CHANGES} -gt $MAX_CHARS ]; then
+            TRUNCATED_SYNC_CHANGES="${SYNC_CHANGES:0:$MAX_CHARS}..."
+          else
+            TRUNCATED_SYNC_CHANGES="$SYNC_CHANGES"
+          fi
+
+          ESCAPED_CHANGES=$(echo "$TRUNCATED_SYNC_CHANGES" | sed -e ':a' -e 'N' -e '$!ba' -e 's|\n|\\n|g' -e 's|/|\\/|g')
 
           # Use double quotes for variable substitution in sed
-          sed -e "s|\\\$RUN_URL|${RUN_URL}|g" -e "s|\\\$SYNC_CHANGES|${ESCAPED_CHANGES}|g" .github/supporting-files/ci/templates/osl_sync_pr_template.md > temp.md
+          sed -e "s|\\\$RUN_URL|${RUN_URL}|g" -e "s|\\\$TRUNCATED_SYNC_CHANGES|${ESCAPED_CHANGES}|g" .github/supporting-files/ci/templates/osl_sync_pr_template.md > temp.md
 
           prTitle="[$(date +'%Y-%m-%d:%H%M%S')] - :robot: Automated PR: Sync main with upstream"
           reviewersOption=""
