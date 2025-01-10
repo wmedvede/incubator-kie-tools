@@ -7,5 +7,5 @@ This pull request has been created by a GitHub workflow to synchronize the main 
 
 <details>
 <summary>Resolved conflicts:</summary>
-$SYNC_CHANGES
+$TRUNCATED_SYNC_CHANGES
 </details>
