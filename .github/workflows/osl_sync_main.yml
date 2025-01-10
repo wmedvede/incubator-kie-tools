@@ -89,6 +89,7 @@ jobs:
         id: capture_changes
         run: |
           SYNC_CHANGES=$(git status --porcelain)
+          echo "$SYNC_CHANGES" > /tmp/sync_changes.txt
           if [ -n "$SYNC_CHANGES" ]; then
             echo "HAS_CHANGES=true" >> $GITHUB_ENV
           else
