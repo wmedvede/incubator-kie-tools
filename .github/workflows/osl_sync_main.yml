@@ -68,22 +68,22 @@ jobs:
           git checkout upstream/main -- pnpm-lock.yaml repo/graph.*
           pnpm bootstrap --no-frozen-lockfile
 
-      - name: Run Bootstrap (No Conflicts)
-        if: env.MERGE_RESULT == 'SUCCESS'
-        run: |
-          pnpm bootstrap --no-frozen-lockfile
-
-      - name: "Run Build"
-        shell: bash
-        env:
-          KIE_TOOLS_BUILD__runTests: "false"
-          KIE_TOOLS_BUILD__runEndToEndTests: "false"
-          KIE_TOOLS_BUILD__buildContainerImages: "true"
-          KIE_TOOLS_BUILD__ignoreTestFailures: "true"
-          KIE_TOOLS_BUILD__ignoreEndToEndTestFailures: "true"
-          NODE_OPTIONS: "--max_old_space_size=4096"
-        run: >-
-          eval "pnpm ${{ env.PNPM_FILTER }} --workspace-concurrency=1 build:prod"
+      # - name: Run Bootstrap (No Conflicts)
+      #   if: env.MERGE_RESULT == 'SUCCESS'
+      #   run: |
+      #     pnpm bootstrap --no-frozen-lockfile
+      #
+      # - name: "Run Build"
+      #   shell: bash
+      #   env:
+      #     KIE_TOOLS_BUILD__runTests: "false"
+      #     KIE_TOOLS_BUILD__runEndToEndTests: "false"
+      #     KIE_TOOLS_BUILD__buildContainerImages: "true"
+      #     KIE_TOOLS_BUILD__ignoreTestFailures: "true"
+      #     KIE_TOOLS_BUILD__ignoreEndToEndTestFailures: "true"
+      #     NODE_OPTIONS: "--max_old_space_size=4096"
+      #   run: >-
+      #     eval "pnpm ${{ env.PNPM_FILTER }} --workspace-concurrency=1 build:prod"
 
       - name: Capture Uncommitted Changes
         id: capture_changes
