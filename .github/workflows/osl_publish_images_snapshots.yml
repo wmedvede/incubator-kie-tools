@@ -7,6 +7,10 @@ on:
         description: "Specify the version for Kogito Runtime"
         required: false
         default: ""
+      IMAGE_TAG:
+        description: "Specify the tag for the images"
+        required: false
+        default: ""
 
 jobs:
   publish_images_snapshots:
@@ -20,10 +24,18 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.KOGITO_VERSION }}" ]; then
             echo "KOGITO_RUNTIME_version=${{ github.event.inputs.KOGITO_VERSION }}" >> $GITHUB_ENV
+          else
+            echo "No KOGITO_VERSION input provided. Keeping the default or existing behavior."
+          fi
+
+      - name: "Exporting OSL_IMAGE_TAG"
+        run: |
+          if [ -n "${{ github.event.inputs.IMAGE_TAG }}" ]; then
+            echo "OSL_IMAGE_TAG=${{ github.event.inputs.IMAGE_TAG }}" >> $GITHUB_ENV
+          elif [ -n "${{ github.event.inputs.KOGITO_VERSION }}" ]; then
             echo "OSL_IMAGE_TAG=${{ github.event.inputs.KOGITO_VERSION }}" >> $GITHUB_ENV
           else
             echo "OSL_IMAGE_TAG=main" >> $GITHUB_ENV
-            echo "No KOGITO_VERSION input provided. Keeping the default or existing behavior."
           fi
 
       - name: "Verify Exported Variables"
