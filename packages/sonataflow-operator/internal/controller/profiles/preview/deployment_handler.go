@@ -95,7 +95,7 @@ func (d *DeploymentReconciler) ensureKnativeServingRequired(workflow *operatorap
 }
 
 func (d *DeploymentReconciler) ensureObjects(ctx context.Context, workflow *operatorapi.SonataFlow, image string) (reconcile.Result, []client.Object, error) {
-	pl, _ := platform.GetActivePlatform(ctx, d.C, workflow.Namespace)
+	pl, _ := platform.GetActivePlatform(ctx, d.C, workflow.Namespace, true)
 	userPropsCM, _, err := d.ensurers.userPropsConfigMap.Ensure(ctx, workflow)
 	if err != nil {
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.ExternalResourcesNotFoundReason, "Unable to retrieve the user properties config map")

@@ -26,6 +26,10 @@ import (
 	sourcesv1 "knative.dev/eventing/pkg/apis/sources/v1"
 	servingv1 "knative.dev/serving/pkg/apis/serving/v1"
 
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/platform/services"
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils"
+
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/knative"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/monitoring"
 
@@ -84,6 +88,7 @@ type SonataFlowReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
+	fmt.Printf("Sonataflow controller Reconcile starting for workflow: %s, namespace: %s\n", req.Name, req.Namespace)
 	// Make sure the operator is allowed to act on namespace
 	if ok, err := platform.IsOperatorAllowedOnNamespace(ctx, r.Client, req.Namespace); err != nil {
 		return reconcile.Result{}, err
@@ -105,13 +110,8 @@ func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	r.setDefaults(workflow)
 	// If the workflow is being deleted, clean up the triggers on a different namespace
-	if workflow.DeletionTimestamp != nil && controllerutil.ContainsFinalizer(workflow, constants.TriggerFinalizer) {
-		err := r.cleanupTriggers(ctx, workflow)
-		if err != nil {
-			klog.V(log.E).ErrorS(err, "Failed to clean up triggers for workflow %s", workflow.Name)
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+	if workflow.DeletionTimestamp != nil {
+		return r.applyFinalizers(ctx, workflow)
 	}
 
 	// Only process resources assigned to the operator
@@ -120,6 +120,24 @@ func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, nil
 	}
 	return profiles.NewReconciler(r.Client, r.Config, r.Recorder, workflow).Reconcile(ctx, workflow)
+}
+
+func (r *SonataFlowReconciler) applyFinalizers(ctx context.Context, workflow *operatorapi.SonataFlow) (ctrl.Result, error) {
+	if controllerutil.ContainsFinalizer(workflow, constants.TriggerFinalizer) {
+		if err := r.cleanupTriggers(ctx, workflow); err != nil {
+			klog.V(log.E).ErrorS(err, "Failed to execute workflow triggers finalizer",
+				"workflow", workflow.Name, "namespace", workflow.Namespace)
+			return ctrl.Result{}, err
+		}
+	}
+	if controllerutil.ContainsFinalizer(workflow, constants.WorkflowFinalizer) {
+		if err := r.workflowDeletion(ctx, workflow); err != nil {
+			klog.V(log.E).ErrorS(err, "Failed to execute workflow deletion finalizer",
+				"workflow", workflow.Name, "namespace", workflow.Namespace)
+			return ctrl.Result{}, err
+		}
+	}
+	return ctrl.Result{}, nil
 }
 
 // TODO: move to webhook see https://github.com/apache/incubator-kie-tools/packages/sonataflow-operator/pull/239
@@ -147,6 +165,78 @@ func (r *SonataFlowReconciler) cleanupTriggers(ctx context.Context, workflow *op
 		}
 	}
 	controllerutil.RemoveFinalizer(workflow, constants.TriggerFinalizer)
+	return r.Client.Update(ctx, workflow)
+}
+
+func (r *SonataFlowReconciler) workflowDeletion(ctx context.Context, workflow *operatorapi.SonataFlow) error {
+	var pl *operatorapi.SonataFlowPlatform
+	var err error
+
+	if pl, err = platform.GetActivePlatform(ctx, r.Client, workflow.Namespace, false); err != nil {
+		return err
+	}
+	if pl == nil {
+		// uncommon case
+		klog.V(log.I).Infof("No active platform was found for workflow: %s, namespace: %s", workflow.Name, workflow.Namespace)
+		controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
+		return nil
+	}
+
+	diHandler := services.NewDataIndexHandler(pl)
+	if !diHandler.IsServiceEnabledInSpec() {
+		// No DI enabled in current SFP, look for a potential SFCP
+		klog.V(log.I).Infof("DataIndex is not enabled for workflow: %s, platform: %s, namespace: %s. "+
+			"Looking if a cluster platform exists.", workflow.Name, pl.Name, workflow.Namespace)
+		if pl, err = knative.GetRemotePlatform(pl); err != nil {
+			return err
+		}
+		if pl == nil {
+			klog.V(log.I).Infof("No cluster platform was found for workflow: %s, namespace: %s", workflow.Name, workflow.Namespace)
+			controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
+			return nil
+		}
+		diHandler = services.NewDataIndexHandler(pl)
+		if !diHandler.IsServiceEnabledInSpec() {
+			klog.V(log.I).Infof("DataIndex is not enabled in cluster referred platform for workflow: %s"+
+				", platform: %s, namespace: %s", workflow.Name, pl.Name, pl.Namespace)
+			controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
+			return nil
+		}
+	}
+
+	klog.V(log.I).Infof("Using DataIndex: %s, in platform: %s, namespace: %s, for workflow: %s, namespace: %s"+
+		" un-deployment notification.", diHandler.GetServiceName(), pl.Name, pl.Namespace, workflow.Name, workflow.Namespace)
+	brokerDest := diHandler.GetServiceSource()
+	var url string
+	if brokerDest != nil && len(brokerDest.Ref.Name) > 0 {
+		brokerNamespace := brokerDest.Ref.Namespace
+		if len(brokerNamespace) == 0 {
+			brokerNamespace = pl.Namespace
+		}
+		klog.V(log.I).Infof("Broker: %s, namespace: %s is configured for DataIndex: %s in platform: %s, namespace: %s",
+			brokerDest.Ref.Name, brokerNamespace, diHandler.GetServiceName(), pl.Name, pl.Namespace)
+		if broker, err := knative.ValidateBroker(brokerDest.Ref.Name, brokerNamespace); err != nil {
+			return err
+		} else {
+			//WM TODO, shall we let the controller iterate and re-ask if the broker is active and if we can get the url.
+			if broker.Status.Address != nil && broker.Status.Address.URL != nil {
+				url = broker.Status.Address.URL.String()
+			}
+		}
+	} else {
+		klog.V(log.I).Infof("No broker is configured for DataIndex: %s in platform: %s, namespace: %s",
+			diHandler.GetServiceName(), pl.Name, pl.Namespace)
+		url = diHandler.GetLocalServiceBaseUrl() + "/definitions"
+	}
+	fmt.Printf("enviar evento a: %s \n", url)
+	klog.V(log.I).Infof("Using url: %s, to deliver the events", url)
+	//WM TODO set the source
+	evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, "http://sonataflow.operator", false)
+	if err = utils.SendCloudEventWithContext(evt, ctx, url); err != nil {
+		fmt.Printf("error enviando evento: %s\n", err.Error())
+		return err
+	}
+	controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
 	return r.Client.Update(ctx, workflow)
 }
 

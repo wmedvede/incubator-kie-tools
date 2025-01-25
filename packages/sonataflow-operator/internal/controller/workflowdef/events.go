@@ -1,13 +1,35 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 package workflowdef
 
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/metadata"
+
+	operatorapi "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08"
+
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/cloudevents/sdk-go/v2/binding"
 	cehttp "github.com/cloudevents/sdk-go/v2/protocol/http"
-	"log"
-	"net/http"
 )
 
 func NewCloudEvent() *cloudevents.Event {
@@ -59,4 +81,26 @@ func NewCloudEvent() *cloudevents.Event {
 
 func ResultOK(httpResult *cehttp.Result) bool {
 	return httpResult.StatusCode == http.StatusOK || httpResult.StatusCode == http.StatusAccepted
+}
+
+func NewWorkflowDefinitionAvailabilityEvent(workflow *operatorapi.SonataFlow, source string, available bool) *cloudevents.Event {
+	var status = "unavailable"
+	if available {
+		status = "available"
+	}
+	event := cloudevents.NewEvent(cloudevents.VersionV1)
+	event.SetType("ProcessDefinitionEvent")
+	event.SetSource(source)
+	event.SetExtension("kogitoprocid", workflow.Name)
+	data := make(map[string]interface{})
+	data["id"] = workflow.Name
+	//WM TODO, can the version be null or empty?
+	version := workflow.ObjectMeta.Annotations[metadata.Version]
+	data["version"] = version
+	data["metadata"] = map[string]interface{}{
+		"status": status,
+	}
+	data["nodes"] = [0]string{}
+	_ = event.SetData(cloudevents.ApplicationJSON, data)
+	return &event
 }

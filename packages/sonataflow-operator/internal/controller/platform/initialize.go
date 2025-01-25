@@ -67,6 +67,8 @@ func (action *initializeAction) Handle(ctx context.Context, platform *operatorap
 	if err != nil {
 		return nil, nil, err
 	}
+	//WM remove, a sonataflow.org/secondary.platform=true is NOT marked as duplicate, so we still reconcile it.
+	//weird, ir could also define a DI and JS
 	if duplicate {
 		// another platform already present in the namespace
 		if !platform.Status.IsDuplicated() {
@@ -159,7 +161,13 @@ func createPersistentVolumeClaim(ctx context.Context, client client.Client, plat
 // Function to double-check if there is already an active platform on the current context (i.e. namespace)
 func (action *initializeAction) isPrimaryDuplicate(ctx context.Context, thisPlatform *operatorapi.SonataFlowPlatform) (bool, error) {
 	if IsSecondary(thisPlatform) {
+		//WM TODO, shall we remove this?
+		//This part will never be true since the 	SecondaryPlatformAnnotation = Domain + "/secondary.platform" is not
+		//being set anymore.
+		//duplicated platforms are now maked by usig the state.
 		// Always reconcile secondary platforms
+		//maybe users can voluntary add the annotation... when they deploy it...
+		//why should they want to deploy many platforms?
 		return false, nil
 	}
 	platforms, err := listPrimaryPlatforms(ctx, action.client, thisPlatform.Namespace)
