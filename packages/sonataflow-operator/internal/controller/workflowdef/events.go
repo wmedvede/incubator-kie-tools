@@ -83,20 +83,24 @@ func ResultOK(httpResult *cehttp.Result) bool {
 	return httpResult.StatusCode == http.StatusOK || httpResult.StatusCode == http.StatusAccepted
 }
 
-func NewWorkflowDefinitionAvailabilityEvent(workflow *operatorapi.SonataFlow, source string, available bool) *cloudevents.Event {
+func NewWorkflowDefinitionAvailabilityEvent(workflow *operatorapi.SonataFlow, eventSource string, serviceUrl string,
+	available bool) *cloudevents.Event {
 	var status = "unavailable"
 	if available {
 		status = "available"
 	}
 	event := cloudevents.NewEvent(cloudevents.VersionV1)
 	event.SetType("ProcessDefinitionEvent")
-	event.SetSource(source)
+	event.SetSource(eventSource)
 	event.SetExtension("kogitoprocid", workflow.Name)
 	data := make(map[string]interface{})
 	data["id"] = workflow.Name
 	//WM TODO, can the version be null or empty?
 	version := workflow.ObjectMeta.Annotations[metadata.Version]
 	data["version"] = version
+	data["type"] = "SW"
+	//TODO continue here
+	data["endpoint"] = serviceUrl
 	data["metadata"] = map[string]interface{}{
 		"status": status,
 	}

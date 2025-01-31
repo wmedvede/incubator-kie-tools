@@ -57,9 +57,11 @@ type newBuilderState struct {
 }
 
 func (h *newBuilderState) CanReconcile(workflow *operatorapi.SonataFlow) bool {
-	return workflow.Status.GetTopLevelCondition().IsUnknown() ||
+	result := workflow.Status.GetTopLevelCondition().IsUnknown() ||
 		workflow.Status.IsWaitingForPlatform() ||
 		workflow.Status.IsBuildFailed()
+	fmt.Printf("newBuilderState.CanReconcile: %t, for workflow: %s\n", result, workflow.Name)
+	return result
 }
 
 func (h *newBuilderState) Do(ctx context.Context, workflow *operatorapi.SonataFlow) (ctrl.Result, []client.Object, error) {
@@ -131,7 +133,9 @@ type followBuildStatusState struct {
 }
 
 func (h *followBuildStatusState) CanReconcile(workflow *operatorapi.SonataFlow) bool {
-	return workflow.Status.IsBuildRunningOrUnknown() || workflow.Status.IsWaitingForBuild()
+	result := workflow.Status.IsBuildRunningOrUnknown() || workflow.Status.IsWaitingForBuild()
+	fmt.Printf("followBuildStatusState.CanReconcile: %t, for workflow: %s\n", result, workflow.Name)
+	return result
 }
 
 func (h *followBuildStatusState) Do(ctx context.Context, workflow *operatorapi.SonataFlow) (ctrl.Result, []client.Object, error) {
@@ -187,17 +191,23 @@ type deployWithBuildWorkflowState struct {
 	*common.StateSupport
 	ensurers           *ObjectEnsurers
 	deploymentVisitors []common.MutateVisitor
+	originalStatus     operatorapi.SonataFlowStatus
 }
 
 func (h *deployWithBuildWorkflowState) CanReconcile(workflow *operatorapi.SonataFlow) bool {
 	// If we have a built ready, we should deploy the object
-	return workflow.Status.GetCondition(api.BuiltConditionType).IsTrue()
+	result := workflow.Status.GetCondition(api.BuiltConditionType).IsTrue()
+	fmt.Printf("deployWithBuildWorkflowState.CanReconcile: %t, for workflow: %s\n", result, workflow.Name)
+	return result
 }
 
 func (h *deployWithBuildWorkflowState) Do(ctx context.Context, workflow *operatorapi.SonataFlow) (ctrl.Result, []client.Object, error) {
 	// Guard to avoid errors while getting a new builder manager.
 	// Maybe we can do typed errors in the buildManager and
 	// have something like sonataerr.IsPlatformNotFound(err) instead.
+	h.originalStatus = workflow.Status
+	fmt.Printf("deployWithBuildWorkflowState.Do originalStatus for workflow: %s, is: %s\n", workflow.Name, h.originalStatus.String())
+
 	_, err := platform.GetActivePlatform(ctx, h.C, workflow.Namespace, true)
 	if err != nil {
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.WaitingForPlatformReason,

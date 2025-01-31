@@ -22,6 +22,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/version"
@@ -79,6 +80,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var controllerCfgPath string
+	fmt.Printf("ProcessDefinition event V9\n")
 	klog.InitFlags(nil)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")

@@ -107,6 +107,13 @@ func (d *deploymentHandler) SyncDeploymentStatus(ctx context.Context, workflow *
 	if kubeutil.IsDeploymentAvailable(deployment) {
 		workflow.Status.Manager().MarkTrue(api.RunningConditionType)
 		klog.V(log.I).InfoS("Workflow is in Running Condition")
+		//WM debug.
+		fmt.Printf("Deployment for workflow %s is available, and we have marked the Status as running."+
+			" Why we need to requeue workflow reconciliation in 1 minute?\n", workflow.Name)
+		//Maybe in cases where the POD for a given WF is destroyed....
+		//but in that case, the Deployment is responsible of creating a new one.
+		//Another example could be in cases where new build for a pod is launched automatically
+		//I have to see these cases
 		return ctrl.Result{RequeueAfter: constants.RequeueAfterIsRunning}, nil
 	}
 

@@ -19,6 +19,15 @@ package preview
 
 import (
 	"context"
+	"fmt"
+	"time"
+
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/properties"
+
+	"k8s.io/klog/v2"
+
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/log"
 
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,11 +62,13 @@ func (d *DeploymentReconciler) Reconcile(ctx context.Context, workflow *operator
 }
 
 func (d *DeploymentReconciler) reconcileWithImage(ctx context.Context, workflow *operatorapi.SonataFlow, image string) (reconcile.Result, []client.Object, error) {
+	fmt.Printf("%s - XXX NewDeploymentReconciler.reconcileWithImage: \n", time.Now().UTC().String())
 	// Checks if we need Knative installed and is not present.
 	if requires, err := d.ensureKnativeServingRequired(workflow); requires || err != nil {
 		return reconcile.Result{Requeue: false}, nil, err
 	}
 
+	originalStatus := workflow.Status
 	// Ensure objects
 	result, objs, err := d.ensureObjects(ctx, workflow, image)
 	if err != nil || result.Requeue {
@@ -71,6 +82,10 @@ func (d *DeploymentReconciler) reconcileWithImage(ctx context.Context, workflow 
 	}
 
 	if _, err := d.PerformStatusUpdate(ctx, workflow); err != nil {
+		return reconcile.Result{Requeue: false}, nil, err
+	}
+
+	if err := d.notifyStatusUpdate(ctx, workflow, originalStatus); err != nil {
 		return reconcile.Result{Requeue: false}, nil, err
 	}
 	return result, objs, nil
@@ -188,4 +203,43 @@ func (d *DeploymentReconciler) deploymentModelMutateVisitors(
 		mountConfigMapsMutateVisitor(workflow, userPropsCM, managedPropsCM),
 		common.RestoreDeploymentVolumeAndVolumeMountMutateVisitor(),
 		common.RolloutDeploymentIfCMChangedMutateVisitor(workflow, userPropsCM, managedPropsCM)}
+}
+
+func (d *DeploymentReconciler) notifyStatusUpdate(ctx context.Context, workflow *operatorapi.SonataFlow,
+	originalStatus operatorapi.SonataFlowStatus) error {
+	var err error
+	var sfp *operatorapi.SonataFlowPlatform
+	originalRunningCondition := originalStatus.GetCondition(api.RunningConditionType)
+	currentRunningCondition := workflow.Status.GetCondition(api.RunningConditionType)
+	runningConditionChanged := false
+
+	fmt.Printf("DeploymentHandler.notifyStatusUpdate, originalStatus: %s, currentStatus: %s\n", originalStatus.String(), workflow.Status.String())
+
+	if originalRunningCondition != nil {
+		runningConditionChanged = currentRunningCondition == nil || *originalRunningCondition != *currentRunningCondition
+	} else {
+		runningConditionChanged = currentRunningCondition != nil
+	}
+	fmt.Printf("currentRunningCondition: %s, runningConditionChanged: %t\n", currentRunningCondition.String(), runningConditionChanged)
+
+	if runningConditionChanged {
+		available := currentRunningCondition != nil && currentRunningCondition.IsTrue()
+		if sfp, err = common.GetDataIndexPlatform(ctx, d.C, workflow); err != nil {
+			return err
+		}
+		if sfp == nil {
+			klog.V(log.I).Infof("No DataIndex containing platform was found for workflow: %s, namespace: %s,"+
+				" to send the workflow definition status change event.", workflow.Name, workflow.Namespace)
+		} else {
+			//WM set the cloud event source
+			//set
+			evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, "http://sonataflow.operator",
+				properties.GetWorkflowEndpointUrl(workflow), available)
+			if err = common.SendWorkflowDefinitionEvent(ctx, workflow, sfp, evt); err != nil {
+				fmt.Printf("error enviando evento: %s\n", err.Error())
+				return err
+			}
+		}
+	}
+	return nil
 }

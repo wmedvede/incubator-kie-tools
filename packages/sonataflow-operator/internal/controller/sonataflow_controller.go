@@ -23,17 +23,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/properties"
+
 	sourcesv1 "knative.dev/eventing/pkg/apis/sources/v1"
 	servingv1 "knative.dev/serving/pkg/apis/serving/v1"
 
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/platform/services"
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils"
+
+	"k8s.io/klog/v2"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/knative"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/monitoring"
-
-	"k8s.io/klog/v2"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/metadata"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/constants"
@@ -169,72 +170,22 @@ func (r *SonataFlowReconciler) cleanupTriggers(ctx context.Context, workflow *op
 }
 
 func (r *SonataFlowReconciler) workflowDeletion(ctx context.Context, workflow *operatorapi.SonataFlow) error {
-	var pl *operatorapi.SonataFlowPlatform
 	var err error
+	var sfp *operatorapi.SonataFlowPlatform
 
-	if pl, err = platform.GetActivePlatform(ctx, r.Client, workflow.Namespace, false); err != nil {
+	if sfp, err = common.GetDataIndexPlatform(ctx, r.Client, workflow); err != nil {
 		return err
 	}
-	if pl == nil {
-		// uncommon case
-		klog.V(log.I).Infof("No active platform was found for workflow: %s, namespace: %s", workflow.Name, workflow.Namespace)
-		controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
-		return nil
-	}
-
-	diHandler := services.NewDataIndexHandler(pl)
-	if !diHandler.IsServiceEnabledInSpec() {
-		// No DI enabled in current SFP, look for a potential SFCP
-		klog.V(log.I).Infof("DataIndex is not enabled for workflow: %s, platform: %s, namespace: %s. "+
-			"Looking if a cluster platform exists.", workflow.Name, pl.Name, workflow.Namespace)
-		if pl, err = knative.GetRemotePlatform(pl); err != nil {
-			return err
-		}
-		if pl == nil {
-			klog.V(log.I).Infof("No cluster platform was found for workflow: %s, namespace: %s", workflow.Name, workflow.Namespace)
-			controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
-			return nil
-		}
-		diHandler = services.NewDataIndexHandler(pl)
-		if !diHandler.IsServiceEnabledInSpec() {
-			klog.V(log.I).Infof("DataIndex is not enabled in cluster referred platform for workflow: %s"+
-				", platform: %s, namespace: %s", workflow.Name, pl.Name, pl.Namespace)
-			controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
-			return nil
-		}
-	}
-
-	klog.V(log.I).Infof("Using DataIndex: %s, in platform: %s, namespace: %s, for workflow: %s, namespace: %s"+
-		" un-deployment notification.", diHandler.GetServiceName(), pl.Name, pl.Namespace, workflow.Name, workflow.Namespace)
-	brokerDest := diHandler.GetServiceSource()
-	var url string
-	if brokerDest != nil && len(brokerDest.Ref.Name) > 0 {
-		brokerNamespace := brokerDest.Ref.Namespace
-		if len(brokerNamespace) == 0 {
-			brokerNamespace = pl.Namespace
-		}
-		klog.V(log.I).Infof("Broker: %s, namespace: %s is configured for DataIndex: %s in platform: %s, namespace: %s",
-			brokerDest.Ref.Name, brokerNamespace, diHandler.GetServiceName(), pl.Name, pl.Namespace)
-		if broker, err := knative.ValidateBroker(brokerDest.Ref.Name, brokerNamespace); err != nil {
-			return err
-		} else {
-			//WM TODO, shall we let the controller iterate and re-ask if the broker is active and if we can get the url.
-			if broker.Status.Address != nil && broker.Status.Address.URL != nil {
-				url = broker.Status.Address.URL.String()
-			}
-		}
+	if sfp == nil {
+		klog.V(log.I).Infof("No DataIndex containing platform was found for workflow: %s, namespace: %s,"+
+			" un-deployment notification", workflow.Name, workflow.Namespace)
 	} else {
-		klog.V(log.I).Infof("No broker is configured for DataIndex: %s in platform: %s, namespace: %s",
-			diHandler.GetServiceName(), pl.Name, pl.Namespace)
-		url = diHandler.GetLocalServiceBaseUrl() + "/definitions"
-	}
-	fmt.Printf("enviar evento a: %s \n", url)
-	klog.V(log.I).Infof("Using url: %s, to deliver the events", url)
-	//WM TODO set the source
-	evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, "http://sonataflow.operator", false)
-	if err = utils.SendCloudEventWithContext(evt, ctx, url); err != nil {
-		fmt.Printf("error enviando evento: %s\n", err.Error())
-		return err
+		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, "http://sonataflow.operator",
+			properties.GetWorkflowEndpointUrl(workflow), false)
+		if err = common.SendWorkflowDefinitionEvent(ctx, workflow, sfp, evt); err != nil {
+			fmt.Printf("error enviando evento: %s\n", err.Error())
+			return err
+		}
 	}
 	controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
 	return r.Client.Update(ctx, workflow)
