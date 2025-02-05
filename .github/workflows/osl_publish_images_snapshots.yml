@@ -46,6 +46,28 @@ jobs:
       - name: "Setup environment"
         uses: ./.github/actions/setup-env
 
+      - name: "Clone and Build Additional Apache Repositories"
+        if: ${{ env.KOGITO_RUNTIME_version == '999-SNAPSHOT' }}
+        run: |
+          echo "KOGITO_RUNTIME_version is 999-SNAPSHOT: Cloning and building extra repositories."
+
+          echo "Cloning incubator-kie-drools (main branch)..."
+          git clone --depth 1 --branch main https://github.com/apache/incubator-kie-drools.git
+          cd incubator-kie-drools
+          mvn clean install -Dquickly
+          cd ..
+
+          echo "Cloning incubator-kie-kogito-runtimes (main branch)..."
+          git clone --depth 1 --branch main https://github.com/apache/incubator-kie-kogito-runtimes.git
+          cd incubator-kie-kogito-runtimes
+          mvn clean install -Dquickly
+          cd ..
+
+          echo "Cloning incubator-kie-kogito-apps (main branch)..."
+          git clone --depth 1 --branch main https://github.com/apache/incubator-kie-kogito-apps.git
+          cd incubator-kie-kogito-apps
+          mvn clean install -Dquickly
+
       - name: "Bootstrap"
         env:
           PLAYWRIGHT_BASE__installDeps: "true"
