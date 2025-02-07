@@ -46,6 +46,13 @@ jobs:
       - name: "Setup environment"
         uses: ./.github/actions/setup-env
 
+      - name: "Cache Maven repository"
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven
+
       - name: "Clone and Build Additional Apache Repositories"
         if: ${{ env.KOGITO_RUNTIME_version == '999-SNAPSHOT' }}
         run: |
@@ -56,17 +63,21 @@ jobs:
           cd incubator-kie-drools
           mvn clean install -Dquickly
           cd ..
+          rm -rf incubator-kie-drools
 
           echo "Cloning incubator-kie-kogito-runtimes (main branch)..."
           git clone --depth 1 --branch main https://github.com/apache/incubator-kie-kogito-runtimes.git
           cd incubator-kie-kogito-runtimes
           mvn clean install -Dquickly
           cd ..
+          rm -rf incubator-kie-kogito-runtimes
 
           echo "Cloning incubator-kie-kogito-apps (main branch)..."
           git clone --depth 1 --branch main https://github.com/apache/incubator-kie-kogito-apps.git
           cd incubator-kie-kogito-apps
           mvn clean install -Dquickly
+          cd ..
+          rm -rf incubator-kie-kogito-apps
 
       - name: "Bootstrap"
         env:
