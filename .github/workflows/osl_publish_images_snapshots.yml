@@ -47,12 +47,11 @@ jobs:
         uses: ./.github/actions/setup-env
 
       - name: "Cache Maven repository"
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+          restore-keys: ${{ runner.os }}-maven
 
       - name: "Clone and Build Additional Apache Repositories"
         if: ${{ env.KOGITO_RUNTIME_version == '999-SNAPSHOT' }}
