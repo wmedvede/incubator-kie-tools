@@ -23,6 +23,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -206,7 +207,9 @@ func (h *deployWithBuildWorkflowState) Do(ctx context.Context, workflow *operato
 	// Maybe we can do typed errors in the buildManager and
 	// have something like sonataerr.IsPlatformNotFound(err) instead.
 	h.originalStatus = workflow.Status
-	fmt.Printf("deployWithBuildWorkflowState.Do originalStatus for workflow: %s, is: %s\n", workflow.Name, h.originalStatus.String())
+
+	fmt.Printf("%s- XXX deployWithBuildWorkflowState.Do originalStatus for workflow: %s, is:\n %s\n",
+		time.Now().UTC().String(), workflow.Name, h.originalStatus.String())
 
 	_, err := platform.GetActivePlatform(ctx, h.C, workflow.Namespace, true)
 	if err != nil {

@@ -22,6 +22,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/properties"
 
@@ -89,7 +93,7 @@ type SonataFlowReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
-	fmt.Printf("Sonataflow controller Reconcile starting for workflow: %s, namespace: %s\n", req.Name, req.Namespace)
+	fmt.Printf("%s- XXX Sonataflow controller Reconcile starting for workflow: %s, namespace: %s\n", time.Now().UTC().String(), req.Name, req.Namespace)
 	// Make sure the operator is allowed to act on namespace
 	if ok, err := platform.IsOperatorAllowedOnNamespace(ctx, r.Client, req.Namespace); err != nil {
 		return reconcile.Result{}, err
@@ -109,8 +113,10 @@ func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	fmt.Printf("%s- XXX Sonataflow controller Reconcile starting for workflow: %s, status:\n%s\n", time.Now().UTC().String(), workflow.Name, workflow.Status.String())
+
 	r.setDefaults(workflow)
-	// If the workflow is being deleted, clean up the triggers on a different namespace
+	// If the workflow is being deleted, execute all the associated finalizers
 	if workflow.DeletionTimestamp != nil {
 		return r.applyFinalizers(ctx, workflow)
 	}
@@ -123,19 +129,57 @@ func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return profiles.NewReconciler(r.Client, r.Config, r.Recorder, workflow).Reconcile(ctx, workflow)
 }
 
+// applyFinalizers Manages the execution of the potential finalizers added to a workflow.
 func (r *SonataFlowReconciler) applyFinalizers(ctx context.Context, workflow *operatorapi.SonataFlow) (ctrl.Result, error) {
-	if controllerutil.ContainsFinalizer(workflow, constants.TriggerFinalizer) {
-		if err := r.cleanupTriggers(ctx, workflow); err != nil {
-			klog.V(log.E).ErrorS(err, "Failed to execute workflow triggers finalizer",
-				"workflow", workflow.Name, "namespace", workflow.Namespace)
-			return ctrl.Result{}, err
-		}
-	}
-	if controllerutil.ContainsFinalizer(workflow, constants.WorkflowFinalizer) {
-		if err := r.workflowDeletion(ctx, workflow); err != nil {
-			klog.V(log.E).ErrorS(err, "Failed to execute workflow deletion finalizer",
-				"workflow", workflow.Name, "namespace", workflow.Namespace)
-			return ctrl.Result{}, err
+	workflowFinalizers := []string{constants.TriggerFinalizer, constants.WorkflowFinalizer}
+	var err error
+	var requeue *ctrl.Result
+
+	fmt.Printf("%s- XXX applyFinalizers, DeletionTimestamp: %s, Generation: %d, ResourceVersion: %s\n",
+		time.Now().UTC().String(), workflow.DeletionTimestamp.String(), workflow.GetGeneration(), workflow.GetResourceVersion())
+
+	for _, finalizer := range workflowFinalizers {
+		if controllerutil.ContainsFinalizer(workflow, finalizer) {
+			switch finalizer {
+			case constants.TriggerFinalizer:
+				fmt.Printf("Vamos con el Trigger Finalizer\n")
+				err = r.cleanupTriggers(ctx, workflow)
+			case constants.WorkflowFinalizer:
+				fmt.Printf("Vamos con el Deletion Finalizer\n")
+				err = r.workflowDeletion(ctx, workflow)
+			}
+			fmt.Printf("Current FinalizerAttempts %s\n", strconv.Itoa(workflow.Status.FinalizerAttempts))
+			if err != nil {
+				now := metav1.Now()
+				workflow.Status.FinalizerAttempts = workflow.Status.FinalizerAttempts + 1
+				workflow.Status.LastTimeFinalizerAttempt = &now
+
+				klog.V(log.E).ErrorS(err, "Failed to execute workflow finalizer",
+					"workflow", workflow.Name, "namespace", workflow.Namespace, "finalizer", finalizer, "attempts", workflow.Status.FinalizerAttempts)
+				if workflow.Status.FinalizerAttempts < constants.MaxWorkflowFinalizerAttempts {
+					requeue = &ctrl.Result{RequeueAfter: constants.WorkflowFinalizerRetryInterval}
+				} else {
+					klog.V(log.E).ErrorS(err, "No more attempts left for executing workflow finalizer",
+						"workflow", workflow.Name, "namespace", workflow.Namespace, "finalizer", finalizer, "attempts", workflow.Status.FinalizerAttempts)
+					workflow.Status.FinalizerAttempts = 0
+				}
+			} else {
+				workflow.Status.FinalizerAttempts = 0
+				workflow.Status.LastTimeFinalizerAttempt = nil
+			}
+
+			fmt.Printf("Update FinalizerAttempts to value: %s\n", strconv.Itoa(workflow.Status.FinalizerAttempts))
+			if err = r.Client.Status().Update(ctx, workflow); err != nil {
+				return ctrl.Result{}, err
+			}
+			if requeue != nil {
+				fmt.Printf("We must requeue the finalizer: %s with: %s\n", finalizer, (*requeue).RequeueAfter.String())
+				return *requeue, nil
+			}
+			controllerutil.RemoveFinalizer(workflow, finalizer)
+			if err = r.Client.Update(ctx, workflow); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 	}
 	return ctrl.Result{}, nil
@@ -165,8 +209,7 @@ func (r *SonataFlowReconciler) cleanupTriggers(ctx context.Context, workflow *op
 			return err
 		}
 	}
-	controllerutil.RemoveFinalizer(workflow, constants.TriggerFinalizer)
-	return r.Client.Update(ctx, workflow)
+	return nil
 }
 
 func (r *SonataFlowReconciler) workflowDeletion(ctx context.Context, workflow *operatorapi.SonataFlow) error {
@@ -180,15 +223,13 @@ func (r *SonataFlowReconciler) workflowDeletion(ctx context.Context, workflow *o
 		klog.V(log.I).Infof("No DataIndex containing platform was found for workflow: %s, namespace: %s,"+
 			" un-deployment notification", workflow.Name, workflow.Namespace)
 	} else {
-		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, "http://sonataflow.operator",
-			properties.GetWorkflowEndpointUrl(workflow), false)
+		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrl(workflow), false)
 		if err = common.SendWorkflowDefinitionEvent(ctx, workflow, sfp, evt); err != nil {
 			fmt.Printf("error enviando evento: %s\n", err.Error())
 			return err
 		}
 	}
-	controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
-	return r.Client.Update(ctx, workflow)
+	return nil
 }
 
 // Delete implements a handler for the Delete event.
@@ -266,6 +307,15 @@ func buildEnqueueRequestsFromMapFunc(c client.Client, b *operatorapi.SonataFlowB
 func (r *SonataFlowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&operatorapi.SonataFlow{}).
+		WithEventFilter(predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				oldGeneration := e.ObjectOld.GetGeneration()
+				newGeneration := e.ObjectNew.GetGeneration()
+				// Generation is only updated on spec changes (also on deletion), not metadata or status.
+				// Filter out events where the generation hasn't changed to avoid being triggered by status updates.
+				return oldGeneration != newGeneration
+			},
+		}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).

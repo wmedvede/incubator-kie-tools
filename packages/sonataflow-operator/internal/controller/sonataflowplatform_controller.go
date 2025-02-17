@@ -124,8 +124,6 @@ func (r *SonataFlowPlatformReconciler) Reconcile(ctx context.Context, req reconc
 
 	target := instance.DeepCopy()
 
-	//TODO WM remove this comment, each time the SPF is reconciled, if a SFCP is configured,
-	//we update the SPF status with the urls to the DI and JS in memory
 	if err = r.updateIfActiveClusterPlatformExists(ctx, req, target); err != nil {
 		return reconcile.Result{}, err
 	}

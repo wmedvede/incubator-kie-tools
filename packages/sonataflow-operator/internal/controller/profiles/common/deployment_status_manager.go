@@ -103,6 +103,8 @@ func (d *deploymentHandler) SyncDeploymentStatus(ctx context.Context, workflow *
 		return ctrl.Result{RequeueAfter: constants.RequeueAfterFailure}, err
 	}
 
+	fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s\n", workflow.Name)
+
 	// Deployment is available, we can return after setting Running = TRUE
 	if kubeutil.IsDeploymentAvailable(deployment) {
 		workflow.Status.Manager().MarkTrue(api.RunningConditionType)
@@ -114,6 +116,7 @@ func (d *deploymentHandler) SyncDeploymentStatus(ctx context.Context, workflow *
 		//but in that case, the Deployment is responsible of creating a new one.
 		//Another example could be in cases where new build for a pod is launched automatically
 		//I have to see these cases
+		fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s, RunningCondition True return in 1 minute\n", workflow.Name)
 		return ctrl.Result{RequeueAfter: constants.RequeueAfterIsRunning}, nil
 	}
 
@@ -123,6 +126,7 @@ func (d *deploymentHandler) SyncDeploymentStatus(ctx context.Context, workflow *
 		workflow.Status.LastTimeRecoverAttempt = metav1.Now()
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.DeploymentFailureReason, failedReason)
 		klog.V(log.I).InfoS("Workflow deployment failed", "Reason Message", failedReason)
+		fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s, DeploymentFailureReason return in 3 minute\n", workflow.Name)
 		return ctrl.Result{RequeueAfter: constants.RequeueAfterFailure}, nil
 	}
 
@@ -135,12 +139,15 @@ func (d *deploymentHandler) SyncDeploymentStatus(ctx context.Context, workflow *
 		if len(message) > 0 {
 			klog.V(log.I).InfoS("Workflow is not in Running condition duo to a deployment unavailability issue", "reason", message)
 			workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.DeploymentUnavailableReason, message)
+			fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s, DeploymentUnavailableReason return in 3 minute\n", workflow.Name)
+
 			return ctrl.Result{RequeueAfter: constants.RequeueAfterFailure}, nil
 		}
 	}
 
 	workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.WaitingForDeploymentReason, "")
 	klog.V(log.I).InfoS("Workflow is in WaitingForDeployment Condition")
+	fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s, WaitingForDeploymentReason return in 5 seconds\n", workflow.Name)
 	return ctrl.Result{RequeueAfter: constants.RequeueAfterFollowDeployment, Requeue: true}, nil
 }
 

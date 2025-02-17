@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/properties"
 
 	"k8s.io/klog/v2"
@@ -211,35 +213,41 @@ func (d *DeploymentReconciler) notifyStatusUpdate(ctx context.Context, workflow 
 	var sfp *operatorapi.SonataFlowPlatform
 	originalRunningCondition := originalStatus.GetCondition(api.RunningConditionType)
 	currentRunningCondition := workflow.Status.GetCondition(api.RunningConditionType)
-	runningConditionChanged := false
 
-	fmt.Printf("DeploymentHandler.notifyStatusUpdate, originalStatus: %s, currentStatus: %s\n", originalStatus.String(), workflow.Status.String())
+	fmt.Printf("DeploymentHandler.notifyStatusUpdate,\n originalStatus: %s\n, currentStatus: %s\n", originalStatus.String(), workflow.Status.String())
 
-	if originalRunningCondition != nil {
-		runningConditionChanged = currentRunningCondition == nil || *originalRunningCondition != *currentRunningCondition
-	} else {
-		runningConditionChanged = currentRunningCondition != nil
+	if originalRunningCondition == nil {
+		originalRunningCondition = currentRunningCondition
 	}
-	fmt.Printf("currentRunningCondition: %s, runningConditionChanged: %t\n", currentRunningCondition.String(), runningConditionChanged)
 
-	if runningConditionChanged {
-		available := currentRunningCondition != nil && currentRunningCondition.IsTrue()
+	fmt.Printf("originalRunningCondition: %s\n, currentRunningCondition: %s, lastTimeStatusNotified: %v\n",
+		originalRunningCondition.String(), currentRunningCondition.String(), originalStatus.LastTimeStatusNotified)
+
+	if originalRunningCondition.Status != currentRunningCondition.Status || originalStatus.LastTimeStatusNotified == nil {
+		available := currentRunningCondition.IsTrue()
+		fmt.Printf("Status condition changed: %s, available: %t\n", workflow.Name, available)
 		if sfp, err = common.GetDataIndexPlatform(ctx, d.C, workflow); err != nil {
 			return err
 		}
 		if sfp == nil {
-			klog.V(log.I).Infof("No DataIndex containing platform was found for workflow: %s, namespace: %s,"+
-				" to send the workflow definition status change event.", workflow.Name, workflow.Namespace)
+			klog.V(log.I).Infof("No DataIndex containing platform was found for workflow: %s, namespace: %s, to send the workflow definition status change event.",
+				workflow.Name, workflow.Namespace)
 		} else {
-			//WM set the cloud event source
-			//set
-			evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, "http://sonataflow.operator",
-				properties.GetWorkflowEndpointUrl(workflow), available)
+			evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrl(workflow), available)
 			if err = common.SendWorkflowDefinitionEvent(ctx, workflow, sfp, evt); err != nil {
-				fmt.Printf("error enviando evento: %s\n", err.Error())
+				klog.V(log.E).ErrorS(err, "An error was produced while sending a status change notification event for workflow",
+					"workflow", "namespace", workflow.Name, workflow.Namespace)
+				workflow.Status.LastTimeStatusNotified = nil
+			} else {
+				now := metav1.Now()
+				workflow.Status.LastTimeStatusNotified = &now
+			}
+			if err = d.C.Status().Update(ctx, workflow); err != nil {
 				return err
 			}
 		}
 	}
+
+	fmt.Printf("Status condition NOT changed: %s, available: %t\n", workflow.Name, currentRunningCondition.IsTrue())
 	return nil
 }

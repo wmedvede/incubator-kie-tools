@@ -70,6 +70,8 @@ func GetDataIndexPlatform(ctx context.Context, cli client.Client, workflow *oper
 	}
 }
 
+// GetDataIndexBroker returns the broker being used by the DataIndex configured in current SPF if any.
+// Validation is performed to check that the Broker, when configured, is Ready.
 func GetDataIndexBroker(sfp *operatorapi.SonataFlowPlatform) (*eventingv1.Broker, error) {
 	diHandler := services.NewDataIndexHandler(sfp)
 	brokerDest := diHandler.GetServiceSource()
@@ -103,18 +105,18 @@ func SendWorkflowDefinitionEvent(ctx context.Context, workflow *operatorapi.Sona
 		return err
 	}
 	if broker != nil {
-		//WM TODO, shall we let the controller iterate and re-ask if the broker is active and if we can't get the url.
 		if broker.Status.Address != nil && broker.Status.Address.URL != nil {
 			url = broker.Status.Address.URL.String()
+		} else {
+			return fmt.Errorf("no ingress url was found for broker: %s, namespace: %s", broker.Name, broker.Namespace)
 		}
 	} else {
 		klog.V(log.I).Infof("No broker is configured for DataIndex: %s in platform: %s, namespace: %s",
 			diHandler.GetServiceName(), sfp.Name, sfp.Namespace)
 		url = diHandler.GetLocalServiceBaseUrl() + constants.KogitoProcessDefinitionsEventsPath
 	}
-	fmt.Printf("enviar evento a: %s \n", url)
+	fmt.Printf("SendWorkflowDefinitionEvent. enviar evento a: %s \n", url)
 	klog.V(log.I).Infof("Using url: %s, to deliver the events", url)
-	//WM TODO set the source
 	if err = utils.SendCloudEventWithContext(evt, ctx, url); err != nil {
 		fmt.Printf("error enviando evento: %s\n", err.Error())
 		return err
