@@ -24,9 +24,6 @@
         "KOGITO_CONSOLES_KEYCLOAK_URL": {
           "type": "string"
         },
-        "SONATAFLOW_MANAGEMENT_CONSOLE_DATA_INDEX_ENDPOINT": {
-          "type": "string"
-        },
         "SONATAFLOW_MANAGEMENT_CONSOLE_KOGITO_APP_NAME": {
           "type": "string"
         },
@@ -41,8 +38,7 @@
       "required": [
         "SONATAFLOW_MANAGEMENT_CONSOLE_KOGITO_ENV_MODE",
         "SONATAFLOW_MANAGEMENT_CONSOLE_KOGITO_APP_NAME",
-        "SONATAFLOW_MANAGEMENT_CONSOLE_KOGITO_APP_VERSION",
-        "SONATAFLOW_MANAGEMENT_CONSOLE_DATA_INDEX_ENDPOINT"
+        "SONATAFLOW_MANAGEMENT_CONSOLE_KOGITO_APP_VERSION"
       ],
       "type": "object"
     }
