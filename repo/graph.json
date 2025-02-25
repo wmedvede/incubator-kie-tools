@@ -744,17 +744,12 @@
       },
       {
         "source": "@kie-tools/image-env-to-json",
-        "target": "@kie-tools-core/webpack-base",
+        "target": "@kie-tools/root-env",
         "weight": 1
       },
       {
-        "source": "@kie-tools/image-env-to-json",
-        "target": "@kie-tools/eslint",
-        "weight": 1
-      },
-      {
-        "source": "@kie-tools/image-env-to-json",
-        "target": "@kie-tools/tsconfig",
+        "source": "@kie-tools/runtime-tools-management-console-webapp",
+        "target": "@kie-tools-core/workspaces-git-fs",
         "weight": 1
       },
       {
@@ -765,6 +760,11 @@
       {
         "source": "@kie-tools/runtime-tools-management-console-webapp",
         "target": "@kie-tools/runtime-tools-shared-webapp-components",
+        "weight": 1
+      },
+      {
+        "source": "@kie-tools/runtime-tools-management-console-webapp",
+        "target": "@kie-tools/maven-base",
         "weight": 1
       },
       {
@@ -2359,11 +2359,6 @@
       },
       {
         "source": "@kie-tools/sonataflow-management-console-webapp",
-        "target": "@kie-tools-core/react-hooks",
-        "weight": 1
-      },
-      {
-        "source": "@kie-tools/sonataflow-management-console-webapp",
         "target": "@kie-tools/runtime-tools-process-webapp-components",
         "weight": 1
       },
@@ -2490,6 +2485,11 @@
       {
         "source": "@kie-tools/runtime-tools-consoles-helm-chart",
         "target": "@kie-tools/kogito-management-console",
+        "weight": 1
+      },
+      {
+        "source": "@kie-tools/runtime-tools-process-enveloped-components",
+        "target": "@kie-tools-core/react-hooks",
         "weight": 1
       },
       {
