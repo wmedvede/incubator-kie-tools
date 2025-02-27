@@ -243,6 +243,8 @@ spec:
             path: endpoint
           - displayName: finalizerAttempts
             path: finalizerAttempts
+          - displayName: finalizerSucceed
+            path: finalizerSucceed
           - displayName: flowRevision
             path: flowCRC
           - displayName: lastTimeFinalizerAttempt

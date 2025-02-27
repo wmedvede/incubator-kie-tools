@@ -120,15 +120,23 @@ func (a *managedPropertyHandler) withKogitoServiceUrl() ManagedPropertyHandler {
 }
 
 func GetKogitoServiceUrl(workflow *operatorapi.SonataFlow) string {
-	if len(workflow.Namespace) > 0 {
-		return fmt.Sprintf("%s://%s.%s", constants.DefaultHTTPProtocol, workflow.Name, workflow.Namespace)
+	return GetKogitoServiceUrlWithNameAndNamespace(workflow.Name, workflow.Namespace)
+}
+
+func GetKogitoServiceUrlWithNameAndNamespace(name, namespace string) string {
+	if len(namespace) > 0 {
+		return fmt.Sprintf("%s://%s.%s", constants.DefaultHTTPProtocol, name, namespace)
 	} else {
-		return fmt.Sprintf("%s://%s", constants.DefaultHTTPProtocol, workflow.Name)
+		return fmt.Sprintf("%s://%s", constants.DefaultHTTPProtocol, name)
 	}
 }
 
 func GetWorkflowEndpointUrl(workflow *operatorapi.SonataFlow) string {
-	return GetKogitoServiceUrl(workflow) + "/" + workflow.Name
+	return GetWorkflowEndpointUrlWithNameAndNamespace(workflow.Name, workflow.Namespace)
+}
+
+func GetWorkflowEndpointUrlWithNameAndNamespace(name, namespace string) string {
+	return GetKogitoServiceUrlWithNameAndNamespace(name, namespace) + "/" + name
 }
 
 // withKafkaHealthCheckDisabled adds the property kafkaSmallRyeHealthProperty to the application properties.

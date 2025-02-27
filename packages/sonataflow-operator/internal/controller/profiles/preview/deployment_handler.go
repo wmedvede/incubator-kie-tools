@@ -20,6 +20,15 @@ package preview
 import (
 	"context"
 
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/constants"
+
+	controllercommon "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/common"
+
+	"k8s.io/client-go/util/retry"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/properties"
@@ -41,7 +50,6 @@ import (
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/monitoring"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/platform"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common"
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/constants"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils"
 )
 
@@ -80,13 +88,11 @@ func (d *DeploymentReconciler) reconcileWithImage(ctx context.Context, workflow 
 		return reconcile.Result{Requeue: false}, nil, err
 	}
 
+	d.updateLastTimeStatusNotified(workflow, previousStatus)
 	if _, err := d.PerformStatusUpdate(ctx, workflow); err != nil {
 		return reconcile.Result{Requeue: false}, nil, err
 	}
-
-	if err := d.notifyStatusUpdate(ctx, workflow, previousStatus); err != nil {
-		return reconcile.Result{Requeue: false}, nil, err
-	}
+	d.scheduleWorkflowStatusChangeNotification(ctx, workflow)
 	return result, objs, nil
 }
 
@@ -204,39 +210,68 @@ func (d *DeploymentReconciler) deploymentModelMutateVisitors(
 		common.RolloutDeploymentIfCMChangedMutateVisitor(workflow, userPropsCM, managedPropsCM)}
 }
 
-func (d *DeploymentReconciler) notifyStatusUpdate(ctx context.Context, workflow *operatorapi.SonataFlow,
-	previousStatus operatorapi.SonataFlowStatus) error {
-	var err error
-	var sfp *operatorapi.SonataFlowPlatform
+func (d *DeploymentReconciler) updateLastTimeStatusNotified(workflow *operatorapi.SonataFlow, previousStatus operatorapi.SonataFlowStatus) {
 	previousRunningCondition := previousStatus.GetCondition(api.RunningConditionType)
 	currentRunningCondition := workflow.Status.GetCondition(api.RunningConditionType)
 
 	if previousRunningCondition == nil {
 		previousRunningCondition = currentRunningCondition
 	}
+	if previousRunningCondition.Status != currentRunningCondition.Status || workflow.Status.LastTimeStatusNotified != nil && workflow.Status.LastTimeStatusNotified.Time.Before(controllercommon.GetOperatorStartTime()) {
+		workflow.Status.LastTimeStatusNotified = nil
+	}
+}
 
-	if previousRunningCondition.Status != currentRunningCondition.Status || previousStatus.LastTimeStatusNotified == nil {
-		available := currentRunningCondition.IsTrue()
-		if sfp, err = common.GetDataIndexPlatform(ctx, d.C, workflow); err != nil {
-			return err
-		}
-		if sfp == nil {
-			klog.V(log.I).Infof("No DataIndex containing platform was found for workflow: %s, namespace: %s, to send the workflow definition status change event.",
-				workflow.Name, workflow.Namespace)
-		} else {
-			evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrl(workflow), available)
-			if err = common.SendWorkflowDefinitionEvent(ctx, workflow, sfp, evt); err != nil {
-				klog.V(log.E).ErrorS(err, "An error was produced while sending a status change notification event for workflow",
-					"workflow", "namespace", workflow.Name, workflow.Namespace)
-				workflow.Status.LastTimeStatusNotified = nil
+func (d *DeploymentReconciler) scheduleWorkflowStatusChangeNotification(ctx context.Context, workflow *operatorapi.SonataFlow) {
+	if workflow.Status.LastTimeStatusNotified == nil {
+		controllercommon.GetSFCWorker().RunAsync(func() {
+			notifyWorkflowStatusChange(d.C, workflow.Name, workflow.Namespace)
+		})
+	}
+}
+
+func notifyWorkflowStatusChange(cli client.Client, wfName, wfNamespace string) error {
+	var err error
+	var uri string
+	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		workflow := &operatorapi.SonataFlow{}
+		if err = cli.Get(context.Background(), types.NamespacedName{Name: wfName, Namespace: wfNamespace}, workflow); err != nil {
+			if errors.IsNotFound(err) {
+				klog.V(log.I).Infof("Workflow: %s, namespace: %s, was not found to send the workflow definition status update event.", wfName, wfNamespace)
+				return nil
 			} else {
-				now := metav1.Now()
-				workflow.Status.LastTimeStatusNotified = &now
-			}
-			if err = d.C.Status().Update(ctx, workflow); err != nil {
+				klog.V(log.E).ErrorS(err, constants.SendWorkflowDefinitionsStatusUpdateEventError+" It was not possible to read the workflow.", "workflow", "namespace", wfName, wfNamespace)
 				return err
 			}
 		}
-	}
-	return nil
+		workflow = workflow.DeepCopy()
+		available := workflow.Status.GetCondition(api.RunningConditionType).IsTrue()
+		if uri, err = common.GetWorkflowDefinitionEventsTargetURL(cli, workflow); err != nil {
+			klog.V(log.E).ErrorS(err, constants.SendWorkflowDefinitionsStatusUpdateEventError+" Workflow definition events target url calculation failed.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+			return err
+		}
+		if len(uri) == 0 {
+			klog.V(log.E).Infof("No enabled DataIndex, nor Broker, nor Sink configuration was found to send the workflow definition status update event for workflow: %s, namespace: %s", workflow.Name, workflow.Namespace)
+			return nil
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), constants.EventDeliveryTimeout)
+		defer cancel()
+		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrl(workflow), available)
+		if err = utils.SendCloudEventWithContext(evt, ctx, uri); err != nil {
+			klog.V(log.E).ErrorS(err, constants.SendWorkflowDefinitionsStatusUpdateEventError+" Even delivery failed", "workflow", "namespace", workflow.Name, workflow.Namespace)
+			// Controller handle to program a new notification based on the LastTimeStatusNotified.
+			return err
+		} else {
+			now := metav1.Now()
+			// Register the LastTimeStatusNotified, the controller knows how to react based on that value.
+			workflow.Status.LastTimeStatusNotified = &now
+			if err = cli.Status().Update(context.Background(), workflow); err != nil {
+				klog.V(log.E).ErrorS(err, constants.SendWorkflowDefinitionsStatusUpdateEventError+" Workflow status update failed.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+				return err
+			}
+		}
+		return nil
+	})
+	return retryErr
 }

@@ -23,15 +23,20 @@ import (
 	"context"
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils"
 
+	controllercommon "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/common"
+
+	"k8s.io/client-go/util/retry"
+
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/properties"
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
+
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	sourcesv1 "knative.dev/eventing/pkg/apis/sources/v1"
 	servingv1 "knative.dev/serving/pkg/apis/serving/v1"
-
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common"
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
 
 	"k8s.io/klog/v2"
 
@@ -111,9 +116,17 @@ func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	r.setDefaults(workflow)
-	// If the workflow is being deleted, execute all the associated finalizers
+	// If the workflow is being deleted, execute the associated finalizers
 	if workflow.DeletionTimestamp != nil {
 		return r.applyFinalizers(ctx, workflow)
+	}
+
+	// If first recon cycle, add the WorkflowFinalizer
+	if controllerutil.AddFinalizer(workflow, constants.WorkflowFinalizer) {
+		if err := r.Client.Update(ctx, workflow); err != nil {
+			klog.V(log.E).ErrorS(err, "Failed to add the workflow finalizer.", "workflow", "namespace", "finalizer", workflow.Name, workflow.Namespace, constants.WorkflowFinalizer)
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Only process resources assigned to the operator
@@ -122,54 +135,6 @@ func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, nil
 	}
 	return profiles.NewReconciler(r.Client, r.Config, r.Recorder, workflow).Reconcile(ctx, workflow)
-}
-
-// applyFinalizers Manages the execution of the potential finalizers added to a workflow.
-func (r *SonataFlowReconciler) applyFinalizers(ctx context.Context, workflow *operatorapi.SonataFlow) (ctrl.Result, error) {
-	workflowFinalizers := []string{constants.TriggerFinalizer, constants.WorkflowFinalizer}
-	var err error
-	var requeue *ctrl.Result
-
-	for _, finalizer := range workflowFinalizers {
-		if controllerutil.ContainsFinalizer(workflow, finalizer) {
-			switch finalizer {
-			case constants.TriggerFinalizer:
-				err = r.cleanupTriggers(ctx, workflow)
-			case constants.WorkflowFinalizer:
-				err = r.workflowDeletion(ctx, workflow)
-			}
-			if err != nil {
-				now := metav1.Now()
-				workflow.Status.FinalizerAttempts = workflow.Status.FinalizerAttempts + 1
-				workflow.Status.LastTimeFinalizerAttempt = &now
-
-				klog.V(log.E).ErrorS(err, "Failed to execute workflow finalizer",
-					"workflow", workflow.Name, "namespace", workflow.Namespace, "finalizer", finalizer, "attempts", workflow.Status.FinalizerAttempts)
-				if workflow.Status.FinalizerAttempts < constants.MaxWorkflowFinalizerAttempts {
-					requeue = &ctrl.Result{RequeueAfter: constants.WorkflowFinalizerRetryInterval}
-				} else {
-					klog.V(log.E).ErrorS(err, "No more attempts left for executing workflow finalizer",
-						"workflow", workflow.Name, "namespace", workflow.Namespace, "finalizer", finalizer, "attempts", workflow.Status.FinalizerAttempts)
-					workflow.Status.FinalizerAttempts = 0
-				}
-			} else {
-				workflow.Status.FinalizerAttempts = 0
-				workflow.Status.LastTimeFinalizerAttempt = nil
-			}
-
-			if err = r.Client.Status().Update(ctx, workflow); err != nil {
-				return ctrl.Result{}, err
-			}
-			if requeue != nil {
-				return *requeue, nil
-			}
-			controllerutil.RemoveFinalizer(workflow, finalizer)
-			if err = r.Client.Update(ctx, workflow); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-	}
-	return ctrl.Result{}, nil
 }
 
 // TODO: move to webhook see https://github.com/apache/incubator-kie-tools/packages/sonataflow-operator/pull/239
@@ -184,6 +149,93 @@ func (r *SonataFlowReconciler) setDefaults(workflow *operatorapi.SonataFlow) {
 	}
 }
 
+// applyFinalizers Manages the execution of the workflow finalizers.
+func (r *SonataFlowReconciler) applyFinalizers(ctx context.Context, workflow *operatorapi.SonataFlow) (ctrl.Result, error) {
+	if controllerutil.ContainsFinalizer(workflow, constants.TriggerFinalizer) {
+		if err := r.cleanupTriggers(ctx, workflow); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	if controllerutil.ContainsFinalizer(workflow, constants.WorkflowFinalizer) {
+		var wasScheduled = false
+		var err error
+		if !workflow.Status.FinalizerSucceed && workflow.Status.FinalizerAttempts < constants.MaxWorkflowFinalizerAttempts {
+			now := metav1.Now()
+			workflow.Status.FinalizerAttempts = workflow.Status.FinalizerAttempts + 1
+			workflow.Status.LastTimeFinalizerAttempt = &now
+			if err = r.Client.Status().Update(ctx, workflow); err != nil {
+				return ctrl.Result{}, err
+			}
+			if wasScheduled, err = scheduleWorkflowDeletionNotification(r.Client, workflow); err != nil {
+				klog.V(log.E).ErrorS(err, "Failed to schedule workflow deletion notification", "workflow", "namespace", workflow.Name, workflow.Namespace)
+				return ctrl.Result{}, err
+			}
+		}
+		if wasScheduled {
+			return ctrl.Result{RequeueAfter: constants.WorkflowFinalizerRetryInterval}, nil
+		} else {
+			controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
+			if err := r.Client.Update(ctx, workflow); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
+	return ctrl.Result{}, nil
+}
+
+func scheduleWorkflowDeletionNotification(cli client.Client, workflow *operatorapi.SonataFlow) (bool, error) {
+	if eventTargetUrl, err := common.GetWorkflowDefinitionEventsTargetURL(cli, workflow); err != nil {
+		klog.V(log.E).ErrorS(err, "It was not possible to get the definition events target url to send the status update event.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+		return false, err
+	} else {
+		if len(eventTargetUrl) > 0 {
+			controllercommon.GetSFCWorker().RunAsync(func() {
+				wf := *workflow.DeepCopy()
+				notifyWorkflowDeletion(cli, &wf, eventTargetUrl)
+			})
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func notifyWorkflowDeletion(cli client.Client, workflow *operatorapi.SonataFlow, eventTargetUrl string) error {
+	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		var err error
+		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrlWithNameAndNamespace(workflow.Name, workflow.Namespace), false)
+		ctx, cancel := context.WithTimeout(context.Background(), constants.EventDeliveryTimeout)
+		defer cancel()
+
+		if err = utils.SendCloudEventWithContext(evt, ctx, eventTargetUrl); err != nil {
+			klog.V(log.E).ErrorS(err, constants.SendWorkflowDefinitionsStatusUpdateEventError+" Event delivery failed.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+			// controller handles to program a new notification based on the remainder FinalizerAttempts if needed.
+			return err
+		}
+
+		wfName := workflow.Name
+		wfNamespace := workflow.Namespace
+		workflow = &operatorapi.SonataFlow{}
+		if err = cli.Get(context.Background(), types.NamespacedName{Name: wfName, Namespace: wfNamespace}, workflow); err != nil {
+			if errors.IsNotFound(err) {
+				klog.V(log.I).Infof("Workflow: %s, namespace: %s, was not found to send the workflow definition status update event.", wfName, wfNamespace)
+				return nil
+			} else {
+				klog.V(log.E).ErrorS(err, constants.SendWorkflowDefinitionsStatusUpdateEventError+" It was not possible to read the workflow.", "workflow", "namespace", wfName, wfNamespace)
+				return err
+			}
+		}
+
+		workflow = workflow.DeepCopy()
+		workflow.Status.FinalizerSucceed = true
+		if err = cli.Status().Update(context.Background(), workflow); err != nil {
+			klog.V(log.E).ErrorS(err, constants.SendWorkflowDefinitionsStatusUpdateEventError+" Workflow status update failed.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+			return err
+		}
+		return nil
+	})
+	return retryErr
+}
+
 func (r *SonataFlowReconciler) cleanupTriggers(ctx context.Context, workflow *operatorapi.SonataFlow) error {
 	for _, triggerRef := range workflow.Status.Triggers {
 		trigger := &eventingv1.Trigger{
@@ -196,25 +248,8 @@ func (r *SonataFlowReconciler) cleanupTriggers(ctx context.Context, workflow *op
 			return err
 		}
 	}
-	return nil
-}
-
-func (r *SonataFlowReconciler) workflowDeletion(ctx context.Context, workflow *operatorapi.SonataFlow) error {
-	var err error
-	var sfp *operatorapi.SonataFlowPlatform
-
-	if sfp, err = common.GetDataIndexPlatform(ctx, r.Client, workflow); err != nil {
-		return err
-	}
-	if sfp == nil {
-		klog.V(log.I).Infof("No DataIndex containing platform was found for workflow: %s, namespace: %s, for un-deployment notification.", workflow.Name, workflow.Namespace)
-	} else {
-		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrl(workflow), false)
-		if err = common.SendWorkflowDefinitionEvent(ctx, workflow, sfp, evt); err != nil {
-			return err
-		}
-	}
-	return nil
+	controllerutil.RemoveFinalizer(workflow, constants.TriggerFinalizer)
+	return r.Client.Update(ctx, workflow)
 }
 
 // Delete implements a handler for the Delete event.
