@@ -24,11 +24,8 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
-	servingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -62,30 +59,8 @@ type deploymentHandler struct {
 	c client.Client
 }
 
-func (d *deploymentHandler) getDeployment(ctx context.Context, workflow *operatorapi.SonataFlow) (*appsv1.Deployment, error) {
-	deploymentName := workflow.Name
-	if workflow.IsKnativeDeployment() {
-		ksvc := &servingv1.Service{}
-		if err := d.c.Get(ctx, client.ObjectKeyFromObject(workflow), ksvc); err != nil {
-			if errors.IsNotFound(err) {
-				return nil, nil
-			}
-			return nil, err
-		}
-		deploymentName = ksvc.Status.LatestCreatedRevisionName + knativeDeploymentSuffix
-	}
-	deployment := &appsv1.Deployment{}
-	if err := d.c.Get(ctx, types.NamespacedName{Namespace: workflow.Namespace, Name: deploymentName}, deployment); err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return deployment, nil
-}
-
 func (d *deploymentHandler) RolloutDeployment(ctx context.Context, workflow *operatorapi.SonataFlow) error {
-	deployment, err := d.getDeployment(ctx, workflow)
+	deployment, err := GetDeployment(ctx, d.c, workflow)
 	if err != nil || deployment == nil {
 		return err
 	}
@@ -96,17 +71,27 @@ func (d *deploymentHandler) RolloutDeployment(ctx context.Context, workflow *ope
 }
 
 func (d *deploymentHandler) SyncDeploymentStatus(ctx context.Context, workflow *operatorapi.SonataFlow) (ctrl.Result, error) {
-	deployment, err := d.getDeployment(ctx, workflow)
+	deployment, err := GetDeployment(ctx, d.c, workflow)
 	if err != nil || deployment == nil {
 		// we should have the deployment by this time, so even if the error above is not found, we should halt.
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.DeploymentUnavailableReason, "Couldn't find the workflow deployment")
 		return ctrl.Result{RequeueAfter: constants.RequeueAfterFailure}, err
 	}
 
+	fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s\n", workflow.Name)
+
 	// Deployment is available, we can return after setting Running = TRUE
 	if kubeutil.IsDeploymentAvailable(deployment) {
 		workflow.Status.Manager().MarkTrue(api.RunningConditionType)
 		klog.V(log.I).InfoS("Workflow is in Running Condition")
+		//WM debug.
+		fmt.Printf("Deployment for workflow %s is available, and we have marked the Status as running."+
+			" Why we need to requeue workflow reconciliation in 1 minute?\n", workflow.Name)
+		//Maybe in cases where the POD for a given WF is destroyed....
+		//but in that case, the Deployment is responsible of creating a new one.
+		//Another example could be in cases where new build for a pod is launched automatically
+		//I have to see these cases
+		fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s, RunningCondition True return in 1 minute\n", workflow.Name)
 		return ctrl.Result{RequeueAfter: constants.RequeueAfterIsRunning}, nil
 	}
 
@@ -116,6 +101,7 @@ func (d *deploymentHandler) SyncDeploymentStatus(ctx context.Context, workflow *
 		workflow.Status.LastTimeRecoverAttempt = metav1.Now()
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.DeploymentFailureReason, failedReason)
 		klog.V(log.I).InfoS("Workflow deployment failed", "Reason Message", failedReason)
+		fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s, DeploymentFailureReason return in 3 minute\n", workflow.Name)
 		return ctrl.Result{RequeueAfter: constants.RequeueAfterFailure}, nil
 	}
 
@@ -128,12 +114,15 @@ func (d *deploymentHandler) SyncDeploymentStatus(ctx context.Context, workflow *
 		if len(message) > 0 {
 			klog.V(log.I).InfoS("Workflow is not in Running condition duo to a deployment unavailability issue", "reason", message)
 			workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.DeploymentUnavailableReason, message)
+			fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s, DeploymentUnavailableReason return in 3 minute\n", workflow.Name)
+
 			return ctrl.Result{RequeueAfter: constants.RequeueAfterFailure}, nil
 		}
 	}
 
 	workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.WaitingForDeploymentReason, "")
 	klog.V(log.I).InfoS("Workflow is in WaitingForDeployment Condition")
+	fmt.Printf("DeploymentStatusManager.SyncDeploymentStatus workfow: %s, WaitingForDeploymentReason return in 5 seconds\n", workflow.Name)
 	return ctrl.Result{RequeueAfter: constants.RequeueAfterFollowDeployment, Requeue: true}, nil
 }
 

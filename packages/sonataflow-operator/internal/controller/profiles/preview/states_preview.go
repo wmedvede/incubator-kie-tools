@@ -68,6 +68,8 @@ func (h *newBuilderState) Do(ctx context.Context, workflow *operatorapi.SonataFl
 		if errors.IsNotFound(err) {
 			workflow.Status.Manager().MarkFalse(api.BuiltConditionType, api.WaitingForPlatformReason,
 				"No active Platform for namespace %s so the workflow cannot be built.", workflow.Namespace)
+
+			fmt.Printf("states_preview.go.newBuilderState.Do 1, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 			_, err = h.PerformStatusUpdate(ctx, workflow)
 			return ctrl.Result{RequeueAfter: requeueWhileWaitForPlatform}, nil, err
 		}
@@ -78,12 +80,14 @@ func (h *newBuilderState) Do(ctx context.Context, workflow *operatorapi.SonataFl
 	}
 
 	// Perform status updated to ensure workflow.Status.Services references are set before properties calculation.
+	fmt.Printf("states_preview.go.newBuilderState.Do 2, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 	_, err = h.PerformStatusUpdate(ctx, workflow)
 	// Ensure the user and managed properties are prepared before starting the build process, and thus, we make them
 	// available at build time.
 	userPropsCM, _, err := h.ensurers.userPropsConfigMap.Ensure(ctx, workflow)
 	if err != nil {
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.ExternalResourcesNotFoundReason, fmt.Sprintf("Unable to retrieve the user properties config map: %v", err))
+		fmt.Printf("states_preview.go.newBuilderState.Do 3, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 		_, err = h.PerformStatusUpdate(ctx, workflow)
 		return ctrl.Result{}, nil, err
 	}
@@ -92,6 +96,7 @@ func (h *newBuilderState) Do(ctx context.Context, workflow *operatorapi.SonataFl
 		common.ManagedPropertiesMutateVisitor(ctx, h.StateSupport.Catalog, workflow, pl, userPropsCM.(*corev1.ConfigMap)))
 	if err != nil {
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.ExternalResourcesNotFoundReason, fmt.Sprintf("Unable to retrieve the managed properties config map: %v", err))
+		fmt.Printf("states_preview.go.newBuilderState.Do 4, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 		_, err = h.PerformStatusUpdate(ctx, workflow)
 		return ctrl.Result{}, nil, err
 	}
@@ -105,6 +110,8 @@ func (h *newBuilderState) Do(ctx context.Context, workflow *operatorapi.SonataFl
 		klog.V(log.E).ErrorS(err, "Failed to retrieve or create a Build CR")
 		workflow.Status.Manager().MarkFalse(api.BuiltConditionType, api.BuildFailedReason,
 			"Failed to retrieve or create a Build CR", workflow.Namespace)
+
+		fmt.Printf("states_preview.go.newBuilderState.Do 5, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 		_, err = h.PerformStatusUpdate(ctx, workflow)
 		return ctrl.Result{}, nil, err
 	}
@@ -112,6 +119,9 @@ func (h *newBuilderState) Do(ctx context.Context, workflow *operatorapi.SonataFl
 	if build.Status.BuildPhase != operatorapi.BuildPhaseFailed {
 		workflow.Status.Manager().MarkFalse(api.BuiltConditionType, api.BuildIsRunningReason, "")
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.WaitingForBuildReason, "")
+
+		fmt.Printf("states_preview.go.newBuilderState.Do 6, PerformStatusUpdate on workflow: %s\n", workflow.Name)
+
 		_, err = h.PerformStatusUpdate(ctx, workflow)
 		h.Recorder.Eventf(workflow, corev1.EventTypeNormal, api.BuildIsRunningReason, "Workflow %s build has started.", workflow.Name)
 	} else {
@@ -140,6 +150,8 @@ func (h *followBuildStatusState) Do(ctx context.Context, workflow *operatorapi.S
 	if err != nil {
 		klog.V(log.E).ErrorS(err, "Failed to get or create the build for the workflow.")
 		workflow.Status.Manager().MarkFalse(api.BuiltConditionType, api.BuildFailedReason, err.Error())
+
+		fmt.Printf("states_preview.go.followBuildStatusState.Do 1, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 		if _, err = h.PerformStatusUpdate(ctx, workflow); err != nil {
 			return ctrl.Result{}, nil, err
 		}
@@ -158,15 +170,21 @@ func (h *followBuildStatusState) Do(ctx context.Context, workflow *operatorapi.S
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.WaitingForDeploymentReason, "Build has finished, rolling out deployment")
 		//If we have finished a build and the workflow is not running, we will start the provisioning phase
 		workflow.Status.Manager().MarkTrue(api.BuiltConditionType)
+
+		fmt.Printf("states_preview.go.followBuildStatusState.Do 2, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 		_, err = h.PerformStatusUpdate(ctx, workflow)
 		h.Recorder.Eventf(workflow, corev1.EventTypeNormal, api.BuildSuccessfulReason, "Workflow %s build has been finished successfully.", workflow.Name)
 	} else if build.Status.BuildPhase == operatorapi.BuildPhaseFailed || build.Status.BuildPhase == operatorapi.BuildPhaseError {
 		workflow.Status.Manager().MarkFalse(api.BuiltConditionType, api.BuildFailedReason,
 			"Workflow %s build failed. Error: %s", workflow.Name, build.Status.Error)
+
+		fmt.Printf("states_preview.go.followBuildStatusState.Do 3, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 		_, err = h.PerformStatusUpdate(ctx, workflow)
 		h.Recorder.Eventf(workflow, corev1.EventTypeWarning, api.BuildFailedReason, "Workflow %s build has failed. Error: %s", workflow.Name, build.Status.Error)
 	} else if build.Status.BuildPhase == operatorapi.BuildPhaseRunning && !workflow.Status.IsBuildRunning() {
 		workflow.Status.Manager().MarkFalse(api.BuiltConditionType, api.BuildIsRunningReason, "")
+
+		fmt.Printf("states_preview.go.followBuildStatusState.Do 4, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 		_, err = h.PerformStatusUpdate(ctx, workflow)
 		h.Recorder.Eventf(workflow, corev1.EventTypeNormal, api.BuildIsRunningReason, "Workflow %s build is running.", workflow.Name)
 	}
@@ -221,6 +239,8 @@ func (h *deployWithBuildWorkflowState) Do(ctx context.Context, workflow *operato
 		}
 		workflow.Status.Manager().MarkFalse(api.BuiltConditionType, api.BuildIsRunningReason, "Build marked to restart")
 		workflow.Status.Manager().MarkUnknown(api.RunningConditionType, "", "")
+		fmt.Printf("states_preview.go.deployWithBuildWorkflowState.Do 1, PerformStatusUpdate on workflow: %s\n", workflow.Name)
+
 		_, err = h.PerformStatusUpdate(ctx, workflow)
 		h.Recorder.Eventf(workflow, corev1.EventTypeNormal, api.BuildMarkedToRestartReason, "Workflow %s will start a new build.", workflow.Name)
 		return ctrl.Result{Requeue: false}, nil, err
@@ -230,6 +250,8 @@ func (h *deployWithBuildWorkflowState) Do(ctx context.Context, workflow *operato
 	result, objs, err := NewDeploymentReconciler(h.StateSupport, h.ensurers).reconcileWithImage(ctx, workflow, build.Status.ImageTag)
 	if err != nil {
 		workflow.Status.Manager().MarkFalse(api.RunningConditionType, api.DeploymentFailureReason, fmt.Sprintf("Error in deploy the workflow:%s", err))
+		fmt.Printf("states_preview.go.deployWithBuildWorkflowState.Do 2, PerformStatusUpdate on workflow: %s\n", workflow.Name)
+
 		_, err = h.PerformStatusUpdate(ctx, workflow)
 		return result, nil, err
 	}

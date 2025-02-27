@@ -22,6 +22,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils"
 
@@ -69,10 +70,13 @@ func (s *StateSupport) PerformStatusUpdate(ctx context.Context, workflow *operat
 	workflow.Status.Platform.Name = pl.Name
 	workflow.Status.Platform.Namespace = pl.Namespace
 
+	fmt.Printf("%s, do s.C.Status().Update() in PerformStatusUpdate on workflow: %s, resourceVersion: %s \n", time.Now().UTC().String(), workflow.Name, workflow.GetResourceVersion())
 	if err = s.C.Status().Update(ctx, workflow); err != nil {
 		klog.V(log.E).ErrorS(err, "Failed to update Workflow status")
 		return false, err
 	}
+	fmt.Printf("%s, after do s.C.Status().Update() in PerformStatusUpdate on workflow: %s, resourceVersion after update: %s \n", time.Now().UTC().String(), workflow.Name, workflow.GetResourceVersion())
+
 	return true, err
 }
 

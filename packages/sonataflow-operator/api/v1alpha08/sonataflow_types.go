@@ -204,6 +204,8 @@ type SonataFlowStatus struct {
 	FlowCRC uint32 `json:"flowCRC,omitempty"`
 	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="finalizerAttempts"
 	FinalizerAttempts int `json:"finalizerAttempts,omitempty"`
+	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="finalizerSucceed"
+	FinalizerSucceed bool `json:"finalizerSucceed,omitempty"`
 	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="lastTimeFinalizerAttempt"
 	LastTimeFinalizerAttempt *metav1.Time `json:"lastTimeFinalizerAttempt,omitempty"`
 	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="lastTimeStatusNotified"

@@ -22,7 +22,10 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/version"
 
@@ -72,7 +75,25 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 }
 
+func main2() {
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func(message string) {
+		count := 1
+		for {
+			fmt.Printf("%s: %d\n", message, count)
+			count++
+			time.Sleep(2 * time.Second)
+		}
+	}("Vamos")
+	//wg.Wait()
+}
+
 func main() {
+
+	//main2()
+
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
@@ -212,4 +233,5 @@ func main() {
 		os.Exit(1)
 	}
 
+	fmt.Printf("XXXXXXXXXXXXX Operator main has finished\n")
 }

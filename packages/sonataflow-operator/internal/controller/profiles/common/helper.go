@@ -21,6 +21,11 @@ import (
 	"context"
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	servingv1 "knative.dev/serving/pkg/apis/serving/v1"
+
 	v2 "github.com/cloudevents/sdk-go/v2"
 	"k8s.io/klog/v2"
 	eventingv1 "knative.dev/eventing/pkg/apis/eventing/v1"
@@ -34,6 +39,30 @@ import (
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/log"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils"
 )
+
+// GetDeployment returns the deployment associated to a workflow. Considers if the workflow was deployed by using
+// a kubernetes or knative deployment model.
+func GetDeployment(ctx context.Context, cli client.Client, workflow *operatorapi.SonataFlow) (*appsv1.Deployment, error) {
+	deploymentName := workflow.Name
+	if workflow.IsKnativeDeployment() {
+		ksvc := &servingv1.Service{}
+		if err := cli.Get(ctx, client.ObjectKeyFromObject(workflow), ksvc); err != nil {
+			if errors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		deploymentName = ksvc.Status.LatestCreatedRevisionName + knativeDeploymentSuffix
+	}
+	deployment := &appsv1.Deployment{}
+	if err := cli.Get(ctx, types.NamespacedName{Namespace: workflow.Namespace, Name: deploymentName}, deployment); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return deployment, nil
+}
 
 // GetDataIndexPlatform returns the SonataFlowPlatform that declares the DataIndex service currently configured and
 // enabled for the given workflow, if any.

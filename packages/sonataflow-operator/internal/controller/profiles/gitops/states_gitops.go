@@ -19,6 +19,7 @@ package gitops
 
 import (
 	"context"
+	"fmt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,6 +43,7 @@ func (f *ensureBuildSkipped) CanReconcile(workflow *operatorapi.SonataFlow) bool
 func (f *ensureBuildSkipped) Do(ctx context.Context, workflow *operatorapi.SonataFlow) (ctrl.Result, []client.Object, error) {
 	// We skip the build, so let's ensure the status reflect that
 	workflow.Status.Manager().MarkFalse(api.BuiltConditionType, api.BuildSkippedReason, "")
+	fmt.Printf("states_gitops.go.Do, PerformStatusUpdate on workflow: %s\n", workflow.Name)
 	if _, err := f.PerformStatusUpdate(ctx, workflow); err != nil {
 		return ctrl.Result{Requeue: false}, nil, err
 	}
