@@ -125,6 +125,7 @@ func (d *DeploymentReconciler) reconcileWithImage(ctx context.Context, workflow 
 	d.updateLastTimeStatusNotified(workflow, previousStatus)
 
 	fmt.Printf("deployment_handler.go.reconcileWithImage , PerformStatusUpdate on workflow: %s\n", workflow.Name)
+	previousStatusResourceVersion := workflow.GetResourceVersion()
 	if _, err := d.PerformStatusUpdate(ctx, workflow); err != nil {
 		fmt.Printf("deployment_handler.go.reconcileWithImage , error en el PerformStatusUpdate on workflow: %s\n", workflow.Name)
 
@@ -276,14 +277,14 @@ func (d *DeploymentReconciler) updateLastTimeStatusNotified(workflow *operatorap
 	fmt.Printf("DeploymentHandler.updateLastTimeStatusNotified, statusChanged: %t, available: %t\n", changed, currentRunningCondition.IsTrue())
 }
 
-func (d *DeploymentReconciler) notifyStatusUpdate(ctx context.Context, workflow *operatorapi.SonataFlow) {
+func (d *DeploymentReconciler) notifyStatusUpdate(ctx context.Context, previousResourceVersion, workflow *operatorapi.SonataFlow) {
 	fmt.Printf("DeploymentHandler.notifyStatusUpdate, workflow: %s, lastTimeStatusNotified: %v\n", workflow.Name, workflow.Status.LastTimeStatusNotified)
 	if workflow.Status.LastTimeStatusNotified == nil {
 		fmt.Printf("DeploymentHandler.notifyStatusUpdate, program the RunAsync for resourceVersion: %s\n", workflow.GetResourceVersion())
 		AsyncRunner.RunAsync(func() error {
 			available := workflow.Status.GetCondition(api.RunningConditionType).IsTrue()
 			fmt.Printf("%s - Ejecutando el AsyncRunner: con workflow: %s, available al llamar: %t\n", time.Now().UTC().String(), workflow.Name, available)
-			sendStatusUpdateEvent(d.C, workflow.Name, workflow.Namespace, workflow.GetResourceVersion())
+			sendStatusUpdateEvent(d.C, workflow.Name, workflow.Namespace, previousResourceVersion, workflow.GetResourceVersion())
 			return nil
 		})
 	}
@@ -354,7 +355,7 @@ func useRetry() {
 }
 */
 
-func sendStatusUpdateEvent(cli client.Client, wfName, wfNamespace string, wfResourceVersion string) {
+func sendStatusUpdateEvent(cli client.Client, wfName, wfNamespace string, wfPreviousResourceVersion, wfResourceVersion string) {
 
 	var err error
 	var sfp *operatorapi.SonataFlowPlatform

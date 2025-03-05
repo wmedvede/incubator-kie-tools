@@ -165,7 +165,7 @@ func (r *SonataFlowReconciler) applyFinalizers(ctx context.Context, workflow *op
 			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - after status update and programming preview.AsyncRunner.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
 
 			preview.AsyncRunner.RunAsync(func() error {
-				notifyWorkflowDeletion2(r.Client, workflow.Name, workflow.Namespace, workflow.GetResourceVersion())
+				notifyWorkflowDeletion2(r.Client, workflow.Name, workflow.Namespace, workflow.GetResourceVersion(), time.Now())
 				return nil
 			})
 
@@ -232,16 +232,24 @@ func (r *SonataFlowReconciler) workflowDeletion(ctx context.Context, workflow *o
 
 const sendStatusUpdateGenericError = "An error was produced while sending workflow status update event."
 
-func notifyWorkflowDeletion2(cli client.Client, wfName, wfNamespace string, wfResourceVersion string) {
+func notifyWorkflowDeletion2(cli client.Client, wfName, wfNamespace string, wfResourceVersion string, programmedAt time.Time) {
 
 	var err error
 	var sfp *operatorapi.SonataFlowPlatform
 
+	now := time.Now()
+	lowerExpectedTime := programmedAt.Add(time.Millisecond + 500)
+	fmt.Printf("sonataflow_controller.go.notifyWorkflowDeletion2, programmedAt: %s, now: %s, lowerExpectedTime: %s\n", programmedAt.UTC().String(), now.UTC().String(), lowerExpectedTime.String())
+	if now.Before(lowerExpectedTime) {
+		fmt.Printf("%s, sonataflow_controller.go.notifyWorkflowDeletion2, started too fast. Lets give %s to sleep\n", time.Now().UTC().String(), lowerExpectedTime.Sub(now).String())
+		//time.Sleep(lowerExpectedTime.Sub(now))
+		fmt.Printf("%s, sonataflow_controller.go.notifyWorkflowDeletion2, wakedup.\n", time.Now())
+	}
 	size := preview.AsyncRunner.Len()
 	fmt.Printf("sonataflow_controller.go.notifyWorkflowDeletion2, Channel Len() = %d\n", size)
 	if size == 0 {
-		fmt.Printf("Channel has no elements! let's try to sleep")
-		time.Sleep(time.Duration(time.Millisecond * 500))
+		fmt.Printf("Channel has no elements!")
+		//time.Sleep(time.Duration(time.Millisecond * 500))
 	}
 	fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion2 - Start workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), wfName, wfResourceVersion)
 
