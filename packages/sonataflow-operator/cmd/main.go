@@ -93,6 +93,7 @@ func main2() {
 func main() {
 
 	//main2()
+	fmt.Printf("Salimo 1\n")
 
 	var metricsAddr string
 	var enableLeaderElection bool

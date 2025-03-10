@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/client-go/util/retry"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -46,7 +48,6 @@ import (
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/monitoring"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/platform"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common"
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/constants"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils"
 )
 
@@ -64,7 +65,7 @@ type DeploymentWorker struct {
 }
 
 func NewDeploymentWorker() DeploymentWorker {
-	return DeploymentWorker{ch: make(chan Runnable)}
+	return DeploymentWorker{ch: make(chan Runnable, 100)}
 }
 
 func (w DeploymentWorker) Start() {
@@ -125,9 +126,8 @@ func (d *DeploymentReconciler) reconcileWithImage(ctx context.Context, workflow 
 	d.updateLastTimeStatusNotified(workflow, previousStatus)
 
 	fmt.Printf("deployment_handler.go.reconcileWithImage , PerformStatusUpdate on workflow: %s\n", workflow.Name)
-	previousStatusResourceVersion := workflow.GetResourceVersion()
 	if _, err := d.PerformStatusUpdate(ctx, workflow); err != nil {
-		fmt.Printf("deployment_handler.go.reconcileWithImage , error en el PerformStatusUpdate on workflow: %s\n", workflow.Name)
+		fmt.Printf("deployment_handler.go.reconcileWithImage , error en el PerformStatusUpdate on workflow: %s, error: %s\n", workflow.Name, err.Error())
 
 		return reconcile.Result{Requeue: false}, nil, err
 	}
@@ -214,7 +214,8 @@ func (d *DeploymentReconciler) ensureObjects(ctx context.Context, workflow *oper
 		if _, err := d.PerformStatusUpdate(ctx, workflow); err != nil {
 			return reconcile.Result{}, nil, err
 		}
-		return reconcile.Result{RequeueAfter: constants.RequeueAfterFollowDeployment, Requeue: true}, objs, nil
+		//TODO WM restore this to the constant
+		return reconcile.Result{RequeueAfter: 30 * time.Second /*constants.RequeueAfterFollowDeployment*/, Requeue: true}, objs, nil
 	}
 	return reconcile.Result{}, objs, nil
 }
@@ -270,6 +271,17 @@ func (d *DeploymentReconciler) updateLastTimeStatusNotified(workflow *operatorap
 
 	fmt.Printf("DeploymentHandler.updateLastTimeStatusNotified,\n previousStatus: %s\n, currentStatus: %s\n, lastTimeStatusNotified: %v\n", previousStatus.String(), workflow.Status.String(), previousStatus.LastTimeStatusNotified)
 	changed := false
+	//TODO WM, aca tengo que considerar el caso donde
+	//el controller esta reiniciando y tal vez me conviene mandar el evento de update.
+	//podria pasar que no tengo cambio destatus en el sentido del deployment, pero por seguridad
+	//me puede interesar de todas formas mandar el evento confirmando el estado
+	// para eso puedo usar la hora de inicio del controller. Y si tengo que
+	// la hora de inicio del controller es posterior a la hora del ultimo status change
+	// envio el evento. si es redundante, mala suerte, un evento mas no molesta.
+	// Cuidado, porque el controller se reinicia tambien cuando hacemos el cambio de version del operator.
+	// tendria que probar como se comporta cuando paso de la 1.35.0 a la 1.36.0....
+	// porque en paralelo, cuando hacemos el cambio de version, normalmente se nos reinician los servicios tambien...
+	// tengo que probarlo.
 	if previousRunningCondition.Status != currentRunningCondition.Status {
 		changed = true
 		workflow.Status.LastTimeStatusNotified = nil
@@ -277,14 +289,14 @@ func (d *DeploymentReconciler) updateLastTimeStatusNotified(workflow *operatorap
 	fmt.Printf("DeploymentHandler.updateLastTimeStatusNotified, statusChanged: %t, available: %t\n", changed, currentRunningCondition.IsTrue())
 }
 
-func (d *DeploymentReconciler) notifyStatusUpdate(ctx context.Context, previousResourceVersion, workflow *operatorapi.SonataFlow) {
+func (d *DeploymentReconciler) notifyStatusUpdate(ctx context.Context, workflow *operatorapi.SonataFlow) {
 	fmt.Printf("DeploymentHandler.notifyStatusUpdate, workflow: %s, lastTimeStatusNotified: %v\n", workflow.Name, workflow.Status.LastTimeStatusNotified)
 	if workflow.Status.LastTimeStatusNotified == nil {
 		fmt.Printf("DeploymentHandler.notifyStatusUpdate, program the RunAsync for resourceVersion: %s\n", workflow.GetResourceVersion())
 		AsyncRunner.RunAsync(func() error {
 			available := workflow.Status.GetCondition(api.RunningConditionType).IsTrue()
 			fmt.Printf("%s - Ejecutando el AsyncRunner: con workflow: %s, available al llamar: %t\n", time.Now().UTC().String(), workflow.Name, available)
-			sendStatusUpdateEvent(d.C, workflow.Name, workflow.Namespace, previousResourceVersion, workflow.GetResourceVersion())
+			sendStatusUpdateEvent(d.C, workflow.Name, workflow.Namespace, workflow.GetResourceVersion())
 			return nil
 		})
 	}
@@ -355,56 +367,74 @@ func useRetry() {
 }
 */
 
-func sendStatusUpdateEvent(cli client.Client, wfName, wfNamespace string, wfPreviousResourceVersion, wfResourceVersion string) {
+func sendStatusUpdateEvent(cli client.Client, wfName, wfNamespace string, wfResourceVersion string) {
 
 	var err error
 	var sfp *operatorapi.SonataFlowPlatform
 
 	fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent - Start workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), wfName, wfResourceVersion)
+	size := AsyncRunner.Len()
+	fmt.Printf("deployment_handler.go.sendStatusUpdateEvent, Channel Len() = %d\n", size)
 
-	workflow := &operatorapi.SonataFlow{}
-	if err = cli.Get(context.Background(), types.NamespacedName{Name: wfName, Namespace: wfNamespace}, workflow); err != nil {
-		if errors.IsNotFound(err) {
-			klog.V(log.I).Infof(sendStatusUpdateGenericError+" Workflow: %s, namespace: %s, was not found.", wfName, wfNamespace)
-		} else {
-			klog.V(log.E).ErrorS(err, sendStatusUpdateGenericError+" It was not possible to read the workflow.", "workflow", "namespace", wfName, wfNamespace)
+	retryNumber := 1
+
+	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		workflow := &operatorapi.SonataFlow{}
+		if err = cli.Get(context.Background(), types.NamespacedName{Name: wfName, Namespace: wfNamespace}, workflow); err != nil {
+			if errors.IsNotFound(err) {
+				klog.V(log.I).Infof(sendStatusUpdateGenericError+" Workflow: %s, namespace: %s, was not found.", wfName, wfNamespace)
+				return nil
+			} else {
+				klog.V(log.E).ErrorS(err, sendStatusUpdateGenericError+" It was not possible to read the workflow.", "workflow", "namespace", wfName, wfNamespace)
+				return err
+			}
 		}
-		return
-	}
 
-	fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent - workflow: %s, wfResourceVersion: %s, currentResourceVersion: %s, currentStatus: %s\n",
-		time.Now().UTC().String(), wfName, wfResourceVersion, workflow.GetResourceVersion(), workflow.Status.String())
+		fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent - retryNumber: %d, workflow: %s, wfResourceVersion: %s, currentResourceVersion: %s, currentStatus: %s\n",
+			time.Now().UTC().String(), retryNumber, wfName, wfResourceVersion, workflow.GetResourceVersion(), workflow.Status.String())
+		retryNumber = retryNumber + 1
 
-	workflow = workflow.DeepCopy()
-	available := workflow.Status.GetCondition(api.RunningConditionType).IsTrue()
-	fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent workflow: %s, available: %t\n", time.Now().UTC().String(), workflow.Name, available)
+		workflow = workflow.DeepCopy()
+		available := workflow.Status.GetCondition(api.RunningConditionType).IsTrue()
+		fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent workflow: %s, available: %t\n", time.Now().UTC().String(), workflow.Name, available)
 
-	if sfp, err = common.GetDataIndexPlatform(context.Background(), cli, workflow); err != nil {
-		klog.V(log.E).ErrorS(err, sendStatusUpdateGenericError+" It was not possible to get the DataIndex containing platform.", "workflow", "namespace", workflow.Name, workflow.Namespace)
-		return
-	}
-	if sfp == nil {
-		klog.V(log.I).Infof("No DataIndex containing platform was found for workflow: %s, namespace: %s, to send the workflow definition status change event.",
-			workflow.Name, workflow.Namespace)
-	} else {
+		if sfp, err = common.GetDataIndexPlatform(context.Background(), cli, workflow); err != nil {
+			klog.V(log.E).ErrorS(err, sendStatusUpdateGenericError+" It was not possible to get the DataIndex containing platform.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+			return err
+		}
+		if sfp == nil {
+			klog.V(log.I).Infof("No DataIndex containing platform was found for workflow: %s, namespace: %s, to send the workflow definition status change event.", workflow.Name, workflow.Namespace)
+			return nil
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
 		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrl(workflow), available)
-		if err = common.SendWorkflowDefinitionEvent(context.Background(), workflow, sfp, evt); err != nil {
+		if err = common.SendWorkflowDefinitionEvent(ctx, workflow, sfp, evt); err != nil {
 			fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent, Error sending wf event: %s\n", time.Now().UTC().String(), workflow.Name)
-
 			klog.V(log.E).ErrorS(err, sendStatusUpdateGenericError+" Even delivery failed", "workflow", "namespace", workflow.Name, workflow.Namespace)
+			// Controller handle to program a new notification based on the LastTimeStatusNotified.
+			return err
 		} else {
 			now := metav1.Now()
+			// Register the LastTimeStatusNotified, the controller knows how to react based on that value.
 			workflow.Status.LastTimeStatusNotified = &now
-
 			fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent, before cli.Status().Update(context.Background(), workflow) on workflow: %s, resourceVersion: %s\n", time.Now().UTC().String(), workflow.Name, workflow.GetResourceVersion())
 			if err = cli.Status().Update(context.Background(), workflow); err != nil {
 				fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent, PerformStatusUpdate ERROR on workflow: %s, %s\n", time.Now().UTC().String(), workflow.Name, err.Error())
 				klog.V(log.E).ErrorS(err, sendStatusUpdateGenericError+" Workflow status update failed.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+				return err
 			} else {
+				//TODO WM remove this else, only for printing the executed path
 				fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent, after cli.Status().Update(context.Background(), workflow) on workflow: %s, resourceVersion: %s\n", time.Now().UTC().String(), workflow.Name, workflow.GetResourceVersion())
-
 				fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent, PerformStatusUpdate OK on workflow: %s\n", time.Now().UTC().String(), workflow.Name)
+				return nil
 			}
 		}
+	})
+	if retryErr != nil {
+		fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent - workflow: %s, retryNumber: %d, retryErr: %s\n", time.Now().UTC().String(), wfName, retryNumber, retryErr.Error())
+	} else {
+		fmt.Printf("%s - deployment_handler.go.sendStatusUpdateEvent - workflow: %s, was done successful, no retryErrors, retryNumber: %d\n", time.Now().UTC().String(), wfName, retryNumber)
 	}
 }
