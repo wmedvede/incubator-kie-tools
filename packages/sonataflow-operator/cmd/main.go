@@ -24,9 +24,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sync"
-	"time"
 
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/common"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/version"
 
 	prometheus "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -75,24 +74,8 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 }
 
-func main2() {
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func(message string) {
-		count := 1
-		for {
-			fmt.Printf("%s: %d\n", message, count)
-			count++
-			time.Sleep(2 * time.Second)
-		}
-	}("Vamos")
-	//wg.Wait()
-}
-
 func main() {
 
-	//main2()
 	fmt.Printf("Salimo 1\n")
 
 	var metricsAddr string
@@ -174,6 +157,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize the worker used by the SonataFlow reconciliations to execute auxiliary async operations.
+	common.InitializeSFCWorker(controller.SonataFlowControllerWorkerSize)
+
 	if err = (&controller.SonataFlowReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
@@ -234,5 +220,4 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("XXXXXXXXXXXXX Operator main has finished\n")
 }

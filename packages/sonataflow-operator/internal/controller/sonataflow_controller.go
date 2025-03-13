@@ -24,13 +24,13 @@ import (
 	"fmt"
 	"time"
 
+	controllercommon "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/common"
+
 	"k8s.io/client-go/util/retry"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/properties"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
-
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/preview"
 
 	"github.com/google/uuid"
 
@@ -106,9 +106,13 @@ func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, nil
 	}
 
+	reconcileId := uuid.NewString()
+	fmt.Printf("%s ---  %s - XXX START: Sonataflow controller Reconcile starting for workflow: %s, namespace: %s\n", time.Now().UTC().String(), reconcileId, req.Name, req.Namespace)
+
 	// Fetch the Workflow instance
 	workflow := &operatorapi.SonataFlow{}
 	err := r.Client.Get(ctx, req.NamespacedName, workflow)
+
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -116,15 +120,23 @@ func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		klog.V(log.E).ErrorS(err, "Failed to get SonataFlow")
 		return ctrl.Result{}, err
 	}
-
-	reconcileId := uuid.NewString()
-	fmt.Printf("%s ---  %s - XXX START: Sonataflow controller Reconcile starting for workflow: %s, status:\n%s\n", time.Now().UTC().String(), reconcileId, workflow.Name, workflow.Status.String())
+	fmt.Printf("%s ---  %s - workflow sonataflow-controller: before add finalizer: %s, generation: %d, resourceVersion: %s\n", time.Now().UTC().String(), reconcileId, req.Name, workflow.Generation, workflow.GetResourceVersion())
 
 	r.setDefaults(workflow)
 	// If the workflow is being deleted, execute all the associated finalizers
 	if workflow.DeletionTimestamp != nil {
 		return r.applyFinalizers(ctx, workflow)
 	}
+
+	if controllerutil.AddFinalizer(workflow, constants.WorkflowFinalizer) {
+		if err := r.Client.Update(ctx, workflow); err != nil {
+			klog.V(log.E).ErrorS(err, "Failed to add workflow finalizer.", "workflow", "finalizer", workflow.Name, constants.WorkflowFinalizer)
+			return ctrl.Result{}, err
+		}
+		fmt.Printf("%s ---  %s - workflow sonataflow-controller: after add finalizer1: %s, generationId: %d, resourceVersion: %s\n", time.Now().UTC().String(), reconcileId, req.Name, workflow.Generation, workflow.GetResourceVersion())
+	}
+
+	fmt.Printf("%s ---  %s - workflow sonataflow-controller: after add finalizer2: %s, generationId: %d, resourceVersion: %s\n", time.Now().UTC().String(), reconcileId, req.Name, workflow.Generation, workflow.GetResourceVersion())
 
 	// Only process resources assigned to the operator
 	if !platform.IsOperatorHandlerConsideringLock(ctx, r.Client, req.Namespace, workflow) {
@@ -159,14 +171,14 @@ func (r *SonataFlowReconciler) applyFinalizers(ctx context.Context, workflow *op
 			workflow.Status.FinalizerAttempts = workflow.Status.FinalizerAttempts + 1
 			workflow.Status.LastTimeFinalizerAttempt = &now
 
-			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - before status update and programming preview.AsyncRunner.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
+			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - before status update and programming controller.GetSFCWorker.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
 			if err := r.Client.Status().Update(ctx, workflow); err != nil {
 				return ctrl.Result{}, err
 			}
 
-			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - after status update and programming preview.AsyncRunner.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
+			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - after status update and programming controller.GetSFCWorker.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
 
-			preview.AsyncRunner.RunAsync(func() error {
+			controllercommon.GetSFCWorker().RunAsync(func() error {
 				notifyWorkflowDeletion2(r.Client, workflow.Name, workflow.Namespace, workflow.GetResourceVersion(), time.Now())
 				return nil
 			})
@@ -174,12 +186,12 @@ func (r *SonataFlowReconciler) applyFinalizers(ctx context.Context, workflow *op
 			return ctrl.Result{RequeueAfter: constants.WorkflowFinalizerRetryInterval}, nil
 		} else {
 			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - before remove WorkflowFinalizer, workflow: %s, FinalizerSucceded: %t, FinalizerAttempts: %d\n", time.Now().UTC().String(), workflow.Name, workflow.Status.FinalizerSucceed, workflow.Status.FinalizerAttempts)
-			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - before remove WorkflowFinalizer preview.AsyncRunner.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
+			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - before remove WorkflowFinalizer controller.GetSFCWorker.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
 			controllerutil.RemoveFinalizer(workflow, constants.WorkflowFinalizer)
 			if err := r.Client.Update(ctx, workflow); err != nil {
 				return ctrl.Result{}, err
 			}
-			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - after remove WorkflowFinalizer preview.AsyncRunner.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
+			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - after remove WorkflowFinalizer controller.GetSFCWorker.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
 		}
 	}
 	return ctrl.Result{}, nil
@@ -250,7 +262,7 @@ func notifyWorkflowDeletion2(cli client.Client, wfName, wfNamespace string, wfRe
 		//time.Sleep(lowerExpectedTime.Sub(now))
 		//fmt.Printf("%s, sonataflow_controller.go.notifyWorkflowDeletion2, wakedup.\n", time.Now())
 	}
-	size := preview.AsyncRunner.Len()
+	size := controllercommon.GetSFCWorker().Len()
 	fmt.Printf("sonataflow_controller.go.notifyWorkflowDeletion2, Channel Len() = %d\n", size)
 	if size == 0 {
 		//fmt.Printf("Channel has no elements!")
@@ -447,6 +459,5 @@ func (r *SonataFlowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		builder = builder.Owns(&prometheus.ServiceMonitor{})
 	}
 	fmt.Printf("XXXXXXXXXXXXX Sonatafow Controller inicialization has finished\n")
-	preview.AsyncRunner.Start()
 	return builder.Complete(r)
 }

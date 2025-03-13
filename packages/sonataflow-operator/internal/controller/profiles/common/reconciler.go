@@ -100,6 +100,13 @@ func (b *Reconciler) Reconcile(ctx context.Context, workflow *operatorapi.Sonata
 	workflow.Status.Manager().InitializeConditions()
 	result, objects, err := b.reconciliationStateMachine.do(ctx, workflow)
 	if err != nil {
+		//TODO WM remove comment.
+		//There are execution paths where we reach this point with both non-zero time result, and err.
+		//This causes the kuberntes controller to print a warning.
+		//E0312 13:12:26.579795       1 reconciler.go:75] "Failed to update Workflow status" err="Operation cannot be fulfilled on sonataflows.sonataflow.org \"callbackstatetimeouts\": the object has been modified; please apply your changes to the latest version and try again"
+		//I0312 13:12:26.579931       1 controller.go:314] "msg"="Warning: Reconciler returned both a non-zero result and a non-nil error. The result will always be ignored if the error is non-nil and the non-nil error causes reqeueuing with exponential backoff. For more details, see: https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler" "SonataFlow"={"name":"callbackstatetimeouts","namespace":"case5-kn-eventing-workflows"} "controller"="sonataflow" "controllerGroup"="sonataflow.org" "controllerKind"="SonataFlow" "logger"="sonataflow-manager" "name"="callbackstatetimeouts" "namespace"="case5-kn-eventing-workflows" "reconcileID"="e9130872-4f05-4b87-af61-12d1fa149507"
+		//E0312 13:12:26.579954       1 controller.go:316] "msg"="Reconciler error" "error"="Operation cannot be fulfilled on sonataflows.sonataflow.org \"callbackstatetimeouts\": the object has been modified; please apply your changes to the latest version and try again" "SonataFlow"={"name":"callbackstatetimeouts","namespace":"case5-kn-eventing-workflows"} "controller"="sonataflow" "controllerGroup"="sonataflow.org" "controllerKind"="SonataFlow" "logger"="sonataflow-manager" "name"="callbackstatetimeouts" "namespace"="case5-kn-eventing-workflows" "reconcileID"="e9130872-4f05-4b87-af61-12d1fa149507"
+
 		return result, err
 	}
 	b.objects = objects

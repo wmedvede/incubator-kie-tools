@@ -21,5 +21,6 @@ package controller
 
 const (
 	// ComponentName just a name to identify this package/component/application
-	ComponentName = "sonataflow-manager"
+	ComponentName                  = "sonataflow-manager"
+	SonataFlowControllerWorkerSize = 100
 )

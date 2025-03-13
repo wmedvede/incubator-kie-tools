@@ -176,6 +176,9 @@ func GetWorkflowSink(workflow *operatorapi.SonataFlow, pl *operatorapi.SonataFlo
 		// no sink defined in the workflow, use the platform broker
 		return getDestinationWithNamespace(pl.Spec.Eventing.Broker, pl.Namespace), nil
 	}
+	if pl == nil {
+		return nil, nil
+	}
 	// Find the remote platform referred by the cluster platform
 	platform, err := GetRemotePlatform(pl)
 	if err != nil {
@@ -289,4 +292,17 @@ func CheckKSinkInjected(name, namespace string) (bool, error) {
 		return true, nil
 	}
 	return false, nil // K_SINK has not been injected yet
+}
+
+func GetSinkBindingSinkURI(name, namespace string) (*apis.URL, error) {
+	sbName := fmt.Sprintf("%s-sb", name)
+	sb := &sourcesv1.SinkBinding{}
+	if err := utils.GetClient().Get(context.TODO(), types.NamespacedName{Name: sbName, Namespace: namespace}, sb); err != nil {
+		return nil, err
+	}
+	cond := sb.Status.GetCondition(apis.ConditionType(apis.ConditionReady))
+	if cond == nil || cond.Status != corev1.ConditionTrue {
+		return nil, fmt.Errorf("SinkBinding name: %s, namespace: %s is not ready", sbName, namespace)
+	}
+	return sb.Status.SinkURI, nil
 }

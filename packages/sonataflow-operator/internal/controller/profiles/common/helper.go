@@ -20,6 +20,9 @@ package common
 import (
 	"context"
 	"fmt"
+	"time"
+
+	duckv1 "knative.dev/pkg/apis/duck/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -151,4 +154,48 @@ func SendWorkflowDefinitionEvent(ctx context.Context, workflow *operatorapi.Sona
 		return err
 	}
 	return nil
+}
+
+// GetWorkflowDefinitionEventTargetURL returns the url that must be used to send the workflow definition status change
+// events.
+func GetWorkflowDefinitionEventTargetURL(cli client.Client, workflow *operatorapi.SonataFlow) (string, error) {
+	var err error
+	var sfp *operatorapi.SonataFlowPlatform
+	var sink *duckv1.Destination
+	var uri string
+
+	fmt.Printf("%s - GetWorkflowDefinitionEventTargetURL - for workflow: %s, namespace: %s\n", time.Now().UTC().String(), workflow.Name, workflow.Namespace)
+
+	if sfp, err = platform.GetActivePlatform(context.Background(), cli, workflow.Namespace, false); err != nil {
+		klog.V(log.E).ErrorS(err, "It was not possible to get the active platform for current workflow.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+		return "", err
+	}
+	if sfp == nil {
+		klog.V(log.I).Infof("No active platform was found for workflow: %s, namespace: %s, to send the workflow definition status change event.", workflow.Name, workflow.Namespace)
+		return "", nil
+	}
+	// TODO wm, aca puedo mejorarlo un poco, podria ser que no hay sfp, y el wf de todas formas
+	// tiene un sink configurado.
+	diHandler := services.NewDataIndexHandler(sfp)
+	if !diHandler.IsServiceEnabled() {
+		klog.V(log.I).Infof("DataIndex is not enabled for current workflow: %s, namespace: %s, neither in current platform: %s, or by a cluster platform reference. No need to send workflow definition status change event.", workflow.Name, workflow.Namespace, sfp.Name)
+		return "", nil
+	}
+	// First check if the workflow is connected with the knative eventing system.
+	if sink, err = knative.GetWorkflowSink(workflow, sfp); err != nil {
+		klog.V(log.E).ErrorS(err, "It was not possible to look for a potential sink configuration to send the status change event.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+		return "", err
+	}
+	if sink != nil {
+		// Workflow is connected via with knative eventing by using an operator managed SinkBinding.
+		if sinkURI, err := knative.GetSinkBindingSinkURI(workflow.Name, workflow.Namespace); err != nil {
+			return "", err
+		} else {
+			uri = sinkURI.String()
+		}
+	} else {
+		// Workflow is connected via direct http invocation with the DI.
+		uri = diHandler.GetServiceBaseUrl() + constants.KogitoProcessDefinitionsEventsPath
+	}
+	return uri, nil
 }
