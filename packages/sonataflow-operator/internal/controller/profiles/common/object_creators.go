@@ -279,7 +279,7 @@ func ServiceCreator(workflow *operatorapi.SonataFlow) (client.Object, error) {
 func SinkBindingCreator(workflow *operatorapi.SonataFlow, plf *operatorapi.SonataFlowPlatform) (client.Object, error) {
 	lbl := workflowproj.GetMergedLabels(workflow)
 
-	sink, err := knative.GetWorkflowSink(workflow, plf)
+	sink, err := knative.GetWorkflowSinkWithPlatform(workflow, plf)
 	if err != nil {
 		return nil, err
 	}

@@ -163,7 +163,7 @@ func GenerateDataIndexWorkflowProperties(workflow *operatorapi.SonataFlow, platf
 	props := properties.NewProperties()
 	props.Set(constants.KogitoProcessDefinitionsEventsEnabled, "false")
 	props.Set(constants.KogitoProcessInstancesEventsEnabled, "false")
-	sink, err := knative.GetWorkflowSink(workflow, platform)
+	sink, err := knative.GetWorkflowSinkWithPlatform(workflow, platform)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func GenerateJobServiceWorkflowProperties(workflow *operatorapi.SonataFlow, plat
 	props := properties.NewProperties()
 	props.Set(constants.JobServiceRequestEventsConnector, constants.QuarkusHTTP)
 	props.Set(constants.JobServiceRequestEventsURL, fmt.Sprintf("%s://localhost%s", constants.DefaultHTTPProtocol, constants.JobServiceJobEventsPath))
-	sink, err := knative.GetWorkflowSink(workflow, platform)
+	sink, err := knative.GetWorkflowSinkWithPlatform(workflow, platform)
 	if err != nil {
 		return nil, err
 	}

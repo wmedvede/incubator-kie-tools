@@ -33,7 +33,7 @@ import (
 func generateKnativeEventingWorkflowProperties(workflow *operatorapi.SonataFlow, platform *operatorapi.SonataFlowPlatform) (*properties.Properties, error) {
 	props := properties.NewProperties()
 	props.Set(constants.KnativeHealthEnabled, "false")
-	sink, err := knative.GetWorkflowSink(workflow, platform)
+	sink, err := knative.GetWorkflowSinkWithPlatform(workflow, platform)
 	if err != nil {
 		return nil, err
 	}

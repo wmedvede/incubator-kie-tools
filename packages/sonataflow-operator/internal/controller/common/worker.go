@@ -24,7 +24,17 @@ import (
 
 var (
 	sonataFlowControllerWorker *Worker
+
+	operatorStarTime time.Time
 )
+
+func SetOperatorStartTime() {
+	operatorStarTime = time.Now()
+}
+
+func GetOperatorStartTime() time.Time {
+	return operatorStarTime
+}
 
 func GetSFCWorker() *Worker {
 	return sonataFlowControllerWorker

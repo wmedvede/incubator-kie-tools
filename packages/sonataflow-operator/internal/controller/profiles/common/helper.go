@@ -156,34 +156,32 @@ func SendWorkflowDefinitionEvent(ctx context.Context, workflow *operatorapi.Sona
 	return nil
 }
 
-// GetWorkflowDefinitionEventTargetURL returns the url that must be used to send the workflow definition status change
-// events.
-func GetWorkflowDefinitionEventTargetURL(cli client.Client, workflow *operatorapi.SonataFlow) (string, error) {
+// GetWorkflowDefinitionEventsTargetURL returns the target url that must be used to send the workflow definition events.
+func GetWorkflowDefinitionEventsTargetURL(cli client.Client, workflow *operatorapi.SonataFlow) (string, error) {
 	var err error
 	var sfp *operatorapi.SonataFlowPlatform
 	var sink *duckv1.Destination
 	var uri string
 
-	fmt.Printf("%s - GetWorkflowDefinitionEventTargetURL - for workflow: %s, namespace: %s\n", time.Now().UTC().String(), workflow.Name, workflow.Namespace)
+	fmt.Printf("%s - GetWorkflowDefinitionEventsTargetURL - for workflow: %s, namespace: %s\n", time.Now().UTC().String(), workflow.Name, workflow.Namespace)
 
 	if sfp, err = platform.GetActivePlatform(context.Background(), cli, workflow.Namespace, false); err != nil {
-		klog.V(log.E).ErrorS(err, "It was not possible to get the active platform for current workflow.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+		klog.V(log.E).ErrorS(err, "It was not possible to get the active platform to calculate the workflow definition events target url.", "workflow", "namespace", workflow.Name, workflow.Namespace)
 		return "", err
 	}
 	if sfp == nil {
-		klog.V(log.I).Infof("No active platform was found for workflow: %s, namespace: %s, to send the workflow definition status change event.", workflow.Name, workflow.Namespace)
-		return "", nil
+		klog.V(log.I).Infof("No active platform was found to calculate the workflow definition events target url for the workflow: %s, namespace: %s.", workflow.Name, workflow.Namespace)
+		return "", err
 	}
-	// TODO wm, aca puedo mejorarlo un poco, podria ser que no hay sfp, y el wf de todas formas
-	// tiene un sink configurado.
 	diHandler := services.NewDataIndexHandler(sfp)
 	if !diHandler.IsServiceEnabled() {
-		klog.V(log.I).Infof("DataIndex is not enabled for current workflow: %s, namespace: %s, neither in current platform: %s, or by a cluster platform reference. No need to send workflow definition status change event.", workflow.Name, workflow.Namespace, sfp.Name)
+		klog.V(log.I).Infof("DataIndex is not enabled for current workflow: %s, namespace: %s, neither in current platform: %s, or by a cluster platform reference.", workflow.Name, workflow.Namespace, sfp.Name)
 		return "", nil
 	}
+
 	// First check if the workflow is connected with the knative eventing system.
-	if sink, err = knative.GetWorkflowSink(workflow, sfp); err != nil {
-		klog.V(log.E).ErrorS(err, "It was not possible to look for a potential sink configuration to send the status change event.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+	if sink, err = knative.GetWorkflowSinkWithPlatform(workflow, sfp); err != nil {
+		klog.V(log.E).ErrorS(err, "It was not possible to look for a potential sink configuration to calculate the workflow definition events target url.", "workflow", "namespace", workflow.Name, workflow.Namespace)
 		return "", err
 	}
 	if sink != nil {

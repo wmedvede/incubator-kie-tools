@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils"
+
 	controllercommon "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/common"
 
 	"k8s.io/client-go/util/retry"
@@ -72,6 +74,8 @@ import (
 	operatorapi "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/platform"
 )
+
+const sendStatusUpdateGenericError = "An error was produced while sending workflow definition status update event."
 
 // SonataFlowReconciler reconciles a SonataFlow object
 type SonataFlowReconciler struct {
@@ -166,23 +170,26 @@ func (r *SonataFlowReconciler) applyFinalizers(ctx context.Context, workflow *op
 	}
 	if controllerutil.ContainsFinalizer(workflow, constants.WorkflowFinalizer) {
 		fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - contains WorkflowFinalizer for workflow: %s, FinalizerSucceded: %t, with FinalizerAttempts: %d\n", time.Now().UTC().String(), workflow.Namespace, workflow.Status.FinalizerSucceed, workflow.Status.FinalizerAttempts)
+		var wasScheduled = false
+		var err error
 		if !workflow.Status.FinalizerSucceed && workflow.Status.FinalizerAttempts < constants.MaxWorkflowFinalizerAttempts {
 			now := metav1.Now()
 			workflow.Status.FinalizerAttempts = workflow.Status.FinalizerAttempts + 1
 			workflow.Status.LastTimeFinalizerAttempt = &now
 
 			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - before status update and programming controller.GetSFCWorker.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
-			if err := r.Client.Status().Update(ctx, workflow); err != nil {
+			if err = r.Client.Status().Update(ctx, workflow); err != nil {
 				return ctrl.Result{}, err
 			}
 
+			if wasScheduled, err = scheduleWorkflowDeletionNotification(r.Client, workflow); err != nil {
+				klog.V(log.E).ErrorS(err, "Failed to program workflow deletion notification", "workflow", "namespace", workflow.Name, workflow.Namespace)
+				return ctrl.Result{}, err
+			}
 			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - after status update and programming controller.GetSFCWorker.RunAsync workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Namespace, workflow.GetResourceVersion())
 
-			controllercommon.GetSFCWorker().RunAsync(func() error {
-				notifyWorkflowDeletion2(r.Client, workflow.Name, workflow.Namespace, workflow.GetResourceVersion(), time.Now())
-				return nil
-			})
-
+		}
+		if wasScheduled {
 			return ctrl.Result{RequeueAfter: constants.WorkflowFinalizerRetryInterval}, nil
 		} else {
 			fmt.Printf("%s - sonataflow_controller.go.applyFinalizers - before remove WorkflowFinalizer, workflow: %s, FinalizerSucceded: %t, FinalizerAttempts: %d\n", time.Now().UTC().String(), workflow.Name, workflow.Status.FinalizerSucceed, workflow.Status.FinalizerAttempts)
@@ -195,6 +202,24 @@ func (r *SonataFlowReconciler) applyFinalizers(ctx context.Context, workflow *op
 		}
 	}
 	return ctrl.Result{}, nil
+}
+
+func scheduleWorkflowDeletionNotification(cli client.Client, workflow *operatorapi.SonataFlow) (bool, error) {
+	if eventTargetUrl, err := common.GetWorkflowDefinitionEventsTargetURL(cli, workflow); err != nil {
+		klog.V(log.E).ErrorS(err, "Workflow definition events target url calculation to send the workflow deletion notification failed.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+		return false, err
+	} else {
+		if len(eventTargetUrl) > 0 {
+			controllercommon.GetSFCWorker().RunAsync(func() error {
+				wf := *workflow.DeepCopy()
+				notifyWorkflowDeletion3(cli, &wf, eventTargetUrl, workflow.GetResourceVersion(), time.Now())
+				//TODO WM, return the error here?
+				return nil
+			})
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // TODO: move to webhook see https://github.com/apache/incubator-kie-tools/packages/sonataflow-operator/pull/239
@@ -244,8 +269,6 @@ func (r *SonataFlowReconciler) workflowDeletion(ctx context.Context, workflow *o
 
 	return nil
 }
-
-const sendStatusUpdateGenericError = "An error was produced while sending workflow definition status update event."
 
 func notifyWorkflowDeletion2(cli client.Client, wfName, wfNamespace string, wfResourceVersion string, programmedAt time.Time) {
 
@@ -331,6 +354,73 @@ func notifyWorkflowDeletion2(cli client.Client, wfName, wfNamespace string, wfRe
 		fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion2 - workflow: %s, retryNumber: %d, retryErr: %s\n", time.Now().UTC().String(), wfName, retryNumber, retryErr.Error())
 	} else {
 		fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion2 - workflow: %s, was done successful, no retryErrors, retryNumber: %d\n", time.Now().UTC().String(), wfName, retryNumber)
+	}
+}
+
+func notifyWorkflowDeletion3(cli client.Client, workflow *operatorapi.SonataFlow, eventTargetUrl, wfResourceVersion string, programmedAt time.Time) {
+	var err error
+	now := time.Now()
+	remove := workflow.Name
+	lowerExpectedTime := programmedAt.Add(time.Millisecond + 500)
+	fmt.Printf("sonataflow_controller.go.notifyWorkflowDeletion3, programmedAt: %s, now: %s, lowerExpectedTime: %s\n", programmedAt.UTC().String(), now.UTC().String(), lowerExpectedTime.String())
+	if now.Before(lowerExpectedTime) {
+		fmt.Printf("%s, sonataflow_controller.go.notifyWorkflowDeletion3, started too fast. We might have a collission\n", time.Now().UTC().String())
+	}
+	size := controllercommon.GetSFCWorker().Len()
+	fmt.Printf("sonataflow_controller.go.notifyWorkflowDeletion3, Channel Len() = %d\n", size)
+
+	fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion3 - Start workflow: %s, wfResourceVersion: %s\n", time.Now().UTC().String(), workflow.Name, wfResourceVersion)
+
+	retryNumber := 1
+	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+
+		//TODO WM, me faltaria el puto source, la concha de su madre, pero todo no se puede. tendria que pasar una copia del WF a este metodo directamente, asi como paso la url
+		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrlWithNameAndNamespace(workflow.Name, workflow.Namespace), false)
+		ctx, cancel := context.WithTimeout(context.Background(), constants.EventDeliveryTimeout)
+		defer cancel()
+
+		if err = utils.SendCloudEventWithContext(evt, ctx, eventTargetUrl); err != nil {
+			fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion3, Error sending wf event: %s\n", time.Now().UTC().String(), workflow.Name)
+			klog.V(log.E).ErrorS(err, sendStatusUpdateGenericError+" Event delivery failed.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+			// controller handles to program a new notification based on the remainder FinalizerAttempts if needed.
+			return err
+		}
+
+		wfName := workflow.Name
+		wfNamespace := workflow.Namespace
+		workflow = &operatorapi.SonataFlow{}
+		if err = cli.Get(context.Background(), types.NamespacedName{Name: wfName, Namespace: wfNamespace}, workflow); err != nil {
+			if errors.IsNotFound(err) {
+				klog.V(log.I).Infof(sendStatusUpdateGenericError+" Workflow: %s, namespace: %s, was not found.", wfName, wfNamespace)
+				fmt.Printf("%s, sonataflow_controller.go: RetryOnConflict - Workflow can not be found probalby it has alrady been removed\n", time.Now().UTC())
+				return nil
+			} else {
+				fmt.Printf("%s, sonataflow_controller.go: RetryOnConflict error reading workflow: %s\n", time.Now().UTC(), err.Error())
+				klog.V(log.E).ErrorS(err, sendStatusUpdateGenericError+" It was not possible to read the workflow.", "workflow", "namespace", wfName, wfNamespace)
+				return err
+			}
+		}
+
+		workflow = workflow.DeepCopy()
+		workflow.Status.FinalizerSucceed = true
+		fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion3, before cli.Status().Update(context.Background(), workflow) on workflow: %s, resourceVersion: %s\n", time.Now().UTC().String(), workflow.Name, workflow.GetResourceVersion())
+		if err = cli.Status().Update(context.Background(), workflow); err != nil {
+			fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion3, PerformStatusUpdate ERROR on workflow: %s, %s\n", time.Now().UTC().String(), workflow.Name, err.Error())
+			klog.V(log.E).ErrorS(err, sendStatusUpdateGenericError+" Workflow status update failed.", "workflow", "namespace", workflow.Name, workflow.Namespace)
+			// "Conflict" error, the RetryOnConflict will catch it.
+			return err
+		} else {
+			//TODO WM remove this else, it's basically only for printing.
+			fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion3, after cli.Status().Update(context.Background(), workflow) on workflow: %s, resourceVersion: %s\n", time.Now().UTC().String(), workflow.Name, workflow.GetResourceVersion())
+
+			fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion3, PerformStatusUpdate OK on workflow: %s\n", time.Now().UTC().String(), workflow.Name)
+			return nil
+		}
+	})
+	if retryErr != nil {
+		fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion3 - workflow: %s, retryNumber: %d, retryErr: %s\n", time.Now().UTC().String(), remove, retryNumber, retryErr.Error())
+	} else {
+		fmt.Printf("%s - sonataflow_controller.go.notifyWorkflowDeletion3 - workflow: %s, was done successful, no retryErrors, retryNumber: %d\n", time.Now().UTC().String(), remove, retryNumber)
 	}
 }
 

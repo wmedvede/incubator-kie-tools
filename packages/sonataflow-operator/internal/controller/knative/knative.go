@@ -165,19 +165,26 @@ func IsKafkaBroker(brokerClass string) bool {
 	return strings.Contains(brokerClass, "Kafka")
 }
 
-func GetWorkflowSink(workflow *operatorapi.SonataFlow, pl *operatorapi.SonataFlowPlatform) (*duckv1.Destination, error) {
-	if workflow == nil {
-		return nil, nil
+func GetWorkflowSink(workflow *operatorapi.SonataFlow) *duckv1.Destination {
+	if workflow != nil && workflow.Spec.Sink != nil {
+		return getDestinationWithNamespace(workflow.Spec.Sink, workflow.Namespace)
 	}
-	if workflow.Spec.Sink != nil {
-		return getDestinationWithNamespace(workflow.Spec.Sink, workflow.Namespace), nil
-	}
-	if pl != nil && pl.Spec.Eventing != nil && pl.Spec.Eventing.Broker != nil {
-		// no sink defined in the workflow, use the platform broker
-		return getDestinationWithNamespace(pl.Spec.Eventing.Broker, pl.Namespace), nil
+	return nil
+}
+
+// GetWorkflowSinkWithPlatform returns the Sink destination that must be used to send the events produced by a workflow,
+// by considering the different configuration alternatives, including the SonataFlowPlatform. Nil if no destination was
+// configured.
+func GetWorkflowSinkWithPlatform(workflow *operatorapi.SonataFlow, pl *operatorapi.SonataFlowPlatform) (*duckv1.Destination, error) {
+	if sink := GetWorkflowSink(workflow); sink != nil {
+		return sink, nil
 	}
 	if pl == nil {
 		return nil, nil
+	}
+	if pl.Spec.Eventing != nil && pl.Spec.Eventing.Broker != nil {
+		// no sink defined in the workflow, use the platform broker
+		return getDestinationWithNamespace(pl.Spec.Eventing.Broker, pl.Namespace), nil
 	}
 	// Find the remote platform referred by the cluster platform
 	platform, err := GetRemotePlatform(pl)
