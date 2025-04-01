@@ -81,27 +81,38 @@ func generateDiscoveryProperties(ctx context.Context, catalog discovery.ServiceC
 	for _, k := range props.Keys() {
 		value, _ := props.Get(k)
 		klog.V(log.I).Infof("Scanning property %s=%s for service discovery configuration.", k, value)
+		fmt.Printf("Scanning property %s=%s for service discovery configuration.\n", k, value)
+
 		if !discoveryLikePropertyExpr.MatchString(value) {
 			klog.V(log.I).Infof("Skipping property %s=%s since it does not look like a service discovery configuration.", k, value)
+			fmt.Printf("Skipping property %s=%s since it does not look like a service discovery configuration.\n", k, value)
+
 		} else {
 			klog.V(log.I).Infof("Property %s=%s looks like a service discovery configuration.", k, value)
+			fmt.Printf("Property %s=%s looks like a service discovery configuration.\n", k, value)
 			plainUri := value[2 : len(value)-1]
 			if uri, err := discovery.ParseUri(plainUri); err != nil {
 				klog.V(log.I).Infof("Property %s=%s not correspond to a valid service discovery configuration, it will be excluded from service discovery.", k, value)
+				fmt.Printf("Property %s=%s not correspond to a valid service discovery configuration, it will be excluded from service discovery.\n", k, value)
 			} else {
 				if len(uri.Namespace) == 0 {
 					klog.V(log.I).Infof("Current service discovery configuration has no configured namespace, workflow namespace: %s will be used instead.", workflow.Namespace)
+					fmt.Printf("Current service discovery configuration has no configured namespace, workflow namespace: %s will be used instead.\n", workflow.Namespace)
 					uri.Namespace = workflow.Namespace
 				}
 				if address, err := catalog.Query(ctx, *uri, discovery.KubernetesDNSAddress); err != nil {
 					klog.V(log.E).ErrorS(err, "An error was produced during service address resolution.", "serviceUri", plainUri)
+					fmt.Printf("An error was produced during service address resolution %s %s.\n", "serviceUri", plainUri)
 					return nil, err
 				} else {
 					klog.V(log.I).Infof("Service: %s was resolved into the following address: %s.", plainUri, address)
+					fmt.Printf("Service: %s was resolved into the following address: %s.\n", plainUri, address)
 					mpProperty := generateMicroprofileServiceCatalogProperty(plainUri)
 					klog.V(log.I).Infof("Generating microprofile service catalog property %s=%s.", mpProperty, address)
+					fmt.Printf("Generating microprofile service catalog property %s=%s.\n", mpProperty, address)
 					result.MustSet(mpProperty, address)
 					klog.V(log.I).Infof("Overriding the discoverable value as the managed property %s=%s.", k, address)
+					fmt.Printf("Overriding the discoverable value as the managed property %s=%s.\n", k, address)
 					result.MustSet(k, address)
 				}
 			}

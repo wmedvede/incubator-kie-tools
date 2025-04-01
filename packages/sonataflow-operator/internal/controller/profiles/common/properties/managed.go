@@ -97,11 +97,14 @@ func (a *managedPropertyHandler) Build() (string, error) {
 	// Update discovery properties
 	removeDiscoveryProperties(userProps)
 	discoveryProps := properties.NewProperties()
+	fmt.Printf("XXXXXXXXXXXXXXXXXXXX Necesito service discovery?\n")
 	if a.requireServiceDiscovery() {
 		// produce the MicroProfileConfigServiceCatalog properties for the service discovery property values if any.
+		fmt.Printf("XXXXXXXXXXXXXXXXXXXX Generando discovery properties\n")
 		if generatedDiscoveryProps, err := generateDiscoveryProperties(a.ctx, a.catalog, userProps, a.workflow); err != nil {
 			return "", err
 		} else {
+			fmt.Printf("XXXXXXXXXXXXXXXXXXXX Tenemos discovery properties: %d\n", generatedDiscoveryProps.Len())
 			discoveryProps.Merge(generatedDiscoveryProps)
 		}
 	}
