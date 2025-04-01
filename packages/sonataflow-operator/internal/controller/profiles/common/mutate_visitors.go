@@ -206,9 +206,13 @@ func ManagedPropertiesMutateVisitor(ctx context.Context, catalog discovery.Servi
 			if err != nil {
 				return err
 			}
-			managedProps.Data[workflowproj.GetManagedPropertiesFileName(workflow)] = propertyHandler.WithUserProperties(userProperties).
+			managedProperties, err := propertyHandler.WithUserProperties(userProperties).
 				WithServiceDiscovery(ctx, catalog).
 				Build()
+			if err != nil {
+				return err
+			}
+			managedProps.Data[workflowproj.GetManagedPropertiesFileName(workflow)] = managedProperties
 			return nil
 		}
 	}

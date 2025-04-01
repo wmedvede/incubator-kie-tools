@@ -22,6 +22,7 @@ package properties
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/cfg"
 
@@ -54,7 +55,7 @@ var (
 type ManagedPropertyHandler interface {
 	WithUserProperties(userProperties string) ManagedPropertyHandler
 	WithServiceDiscovery(ctx context.Context, catalog discovery.ServiceCatalog) ManagedPropertyHandler
-	Build() string
+	Build() (string, error)
 }
 
 type managedPropertyHandler struct {
@@ -77,7 +78,7 @@ func (a *managedPropertyHandler) WithServiceDiscovery(ctx context.Context, catal
 	return a
 }
 
-func (a *managedPropertyHandler) Build() string {
+func (a *managedPropertyHandler) Build() (string, error) {
 	var userProps *properties.Properties
 	var propErr error = nil
 	if len(a.userProperties) == 0 {
@@ -98,11 +99,17 @@ func (a *managedPropertyHandler) Build() string {
 	discoveryProps := properties.NewProperties()
 	if a.requireServiceDiscovery() {
 		// produce the MicroProfileConfigServiceCatalog properties for the service discovery property values if any.
-		discoveryProps.Merge(generateDiscoveryProperties(a.ctx, a.catalog, userProps, a.workflow))
+		if generatedDiscoveryProps, err := generateDiscoveryProperties(a.ctx, a.catalog, userProps, a.workflow); err != nil {
+			return "", err
+		} else {
+			discoveryProps.Merge(generatedDiscoveryProps)
+		}
 	}
 	if profiles.IsDevProfile(a.workflow) && a.requireServiceDiscovery() {
 		// produce dev profile properties that must be calculated at service discovery time.
-		setDevProfileDiscoveryProperties(a.ctx, a.catalog, a.defaultManagedProperties, a.workflow)
+		if err := setDevProfileDiscoveryProperties(a.ctx, a.catalog, a.defaultManagedProperties, a.workflow); err != nil {
+			return "", err
+		}
 	}
 	userProps = utils.NewApplicationPropertiesBuilder().
 		WithInitialProperties(discoveryProps).
@@ -110,7 +117,7 @@ func (a *managedPropertyHandler) Build() string {
 		WithDefaultManagedProperties(a.defaultManagedProperties).
 		Build()
 
-	return userProps.String()
+	return userProps.String(), nil
 }
 
 // withKogitoServiceUrl adds the property kogitoServiceUrlProperty to the application properties.
@@ -225,7 +232,7 @@ func setDevProfileProperties(props *properties.Properties) {
 	props.Set(constants.QuarkusDevUICorsEnabled, "false")
 }
 
-func setDevProfileDiscoveryProperties(ctx context.Context, catalog discovery.ServiceCatalog, props *properties.Properties, workflow *operatorapi.SonataFlow) {
+func setDevProfileDiscoveryProperties(ctx context.Context, catalog discovery.ServiceCatalog, props *properties.Properties, workflow *operatorapi.SonataFlow) error {
 	if utils.IsOpenShift() {
 		// in OpenShift deployments the route is created before the workflow, at this point it can be queried safely.
 		routeUrl, err := catalog.Query(ctx, *discovery.NewResourceUriBuilder(discovery.OpenshiftScheme).
@@ -238,11 +245,15 @@ func setDevProfileDiscoveryProperties(ctx context.Context, catalog discovery.Ser
 			discovery.KubernetesDNSAddress)
 		if err != nil {
 			klog.V(log.E).ErrorS(err, "An error was produced while getting workflow route url. ", "workflow", workflow.Name)
-		} else {
-			props.Set(constants.QuarkusHttpCors, "true")
-			props.Set(constants.QuarkusHttpCorsOrigins, routeUrl)
+			return err
 		}
+		url, err := url.Parse(routeUrl)
+		if err != nil {
+			return err
+		}
+		props.Set(constants.QuarkusDevUIHosts, url.Host)
 	}
+	return nil
 }
 
 // ApplicationManagedProperties immutable default application properties that can be used with any workflow based on Quarkus.
@@ -252,7 +263,7 @@ func ApplicationManagedProperties(workflow *operatorapi.SonataFlow, platform *op
 	if err != nil {
 		return "", err
 	}
-	return p.Build(), nil
+	return p.Build()
 }
 
 func (a *managedPropertyHandler) requireServiceDiscovery() bool {

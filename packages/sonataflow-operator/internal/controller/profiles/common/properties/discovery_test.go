@@ -58,11 +58,11 @@ func Test_generateDiscoveryProperties(t *testing.T) {
 	}
 
 	props := properties.MustLoadString(propertiesContent)
-	result := generateDiscoveryProperties(context.TODO(), catalogService, props, &operatorapi.SonataFlow{
+	result, err := generateDiscoveryProperties(context.TODO(), catalogService, props, &operatorapi.SonataFlow{
 		ObjectMeta: metav1.ObjectMeta{Name: "helloworld", Namespace: defaultNamespace},
 		Spec:       v1alpha08.SonataFlowSpec{Flow: workflow},
 	})
-
+	assert.NoError(t, err)
 	assert.Equal(t, 8, result.Len())
 	assertHasProperty(t, result, "service1", myService1Address)
 	assertHasProperty(t, result, "service2", myService2Address)

@@ -74,7 +74,7 @@ func escapeValue(unescaped string, value string) string {
 //
 // where http://10.5.9.1:8080 is the corresponding k8s cloud address for the service financial-service in the namespace usecase1.
 func generateDiscoveryProperties(ctx context.Context, catalog discovery.ServiceCatalog, props *properties.Properties,
-	workflow *operatorapi.SonataFlow) *properties.Properties {
+	workflow *operatorapi.SonataFlow) (*properties.Properties, error) {
 	klog.V(log.I).Infof("Generating service discovery properties for workflow: %s, and namespace: %s.", workflow.Name, workflow.Namespace)
 	result := properties.NewProperties()
 	props.DisableExpansion = true
@@ -95,6 +95,7 @@ func generateDiscoveryProperties(ctx context.Context, catalog discovery.ServiceC
 				}
 				if address, err := catalog.Query(ctx, *uri, discovery.KubernetesDNSAddress); err != nil {
 					klog.V(log.E).ErrorS(err, "An error was produced during service address resolution.", "serviceUri", plainUri)
+					return nil, err
 				} else {
 					klog.V(log.I).Infof("Service: %s was resolved into the following address: %s.", plainUri, address)
 					mpProperty := generateMicroprofileServiceCatalogProperty(plainUri)
@@ -120,6 +121,7 @@ func generateDiscoveryProperties(ctx context.Context, catalog discovery.ServiceC
 				}
 				if address, err := catalog.Query(ctx, *uri, ""); err != nil {
 					klog.V(log.E).ErrorS(err, "An error was produced during service address resolution.", "serviceUri", function.Operation)
+					return nil, err
 				} else {
 					// when the knative service is invoked from the workflow as an Operation, the query params are not
 					// used for the microprofile property generation.
@@ -135,5 +137,5 @@ func generateDiscoveryProperties(ctx context.Context, catalog discovery.ServiceC
 			}
 		}
 	}
-	return result
+	return result, nil
 }
