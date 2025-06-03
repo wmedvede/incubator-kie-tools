@@ -17,7 +17,9 @@
 # under the License.
 #
 - name: builder
-  from: "registry.access.redhat.com/ubi8/openjdk-17:1.21"
+  #  from: "registry.access.redhat.com/ubi8/openjdk-17:1.21"
+  #  from: "quay.io/jdowland/ubi9-openjdk-21:OPENJDK-3142"
+  from: "registry-proxy.engineering.redhat.com/rh-osbs/ubi9-openjdk-17:1.23-2"
   version: "main"
   modules:
     repositories:
@@ -34,7 +36,9 @@
       - name: org.kie.sonataflow.common.build
 
 - name: "docker.io/apache/incubator-kie-sonataflow-builder"
-  from: "registry.access.redhat.com/ubi8/openjdk-17:1.21"
+  #  from: "registry.access.redhat.com/ubi8/openjdk-17:1.21"
+  #  from: "quay.io/jdowland/ubi9-openjdk-21:OPENJDK-3142"
+  from: "registry-proxy.engineering.redhat.com/rh-osbs/ubi9-openjdk-17:1.23-2"
   version: "main"
   description: "Apache KIE SonataFlow base builder with Quarkus extensions libraries preinstalled"
 

@@ -81,7 +81,10 @@ run_quarkus_mvn_add_extension() {
         source "${KOGITO_HOME}"/launch/configure-jvm-mvn.sh
     fi
 
-    log_info "Processed extensions to be added ${processed_extensions}"
+    log_info "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX Processed extensions to be added ${processed_extensions}"
+    echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX Processed extensions to be added ${processed_extensions}"
+    echo "XXXXXXXXXXXXXXXXXXXXX see maven version"
+    mvn --version
 
     "${MAVEN_CMD}" -B ${MAVEN_ARGS_APPEND} \
         -nsu \
