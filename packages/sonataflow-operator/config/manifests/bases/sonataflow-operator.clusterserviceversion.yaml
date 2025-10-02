@@ -28,7 +28,7 @@ metadata:
     operators.operatorframework.io/internal-objects: '["sonataflowbuilds.sonataflow.org"]'
     repository: https://github.com/apache/incubator-kie-tools/packages/sonataflow-operator
     support: Apache KIE
-  name: sonataflow-operator.v0.0.0
+  name: sonataflow-operator.v1.0.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -299,8 +299,8 @@ spec:
   maintainers:
     - email: dev@kie.apache.org
       name: Apache KIE
-  maturity: stable
+  maturity: alpha
   minKubeVersion: 1.23.0
   provider:
     name: Apache KIE
-  version: 0.0.0
+  version: 1.0.0
