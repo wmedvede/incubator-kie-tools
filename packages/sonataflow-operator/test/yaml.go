@@ -62,6 +62,7 @@ const (
 	knativeDefaultBrokerCR                   = "knative_default_broker.yaml"
 	manifestsPath                            = "bundle/manifests/"
 	DBMigrationSonataFlowPlatform            = "db_migrator_sonataflow_platform.yaml"
+	SonataFlowWithSubFlows                   = "sonataflow.org_v1alpha08_sonataflow_with_subflows.yaml"
 )
 
 var projectDir = ""

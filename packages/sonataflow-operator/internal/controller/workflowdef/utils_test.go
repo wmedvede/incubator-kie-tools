@@ -20,9 +20,14 @@
 package workflowdef
 
 import (
+	"testing"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	cncfmodel "github.com/serverlessworkflow/sdk-go/v2/model"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/test"
 
 	operatorapi "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08"
 )
@@ -283,4 +288,32 @@ func generateActionsWithSleep(before bool, after bool) []cncfmodel.Action {
 		})
 	}
 	return actions
+}
+
+func TestWorkflowRefsQuery(t *testing.T) {
+	workflow := test.GetSonataFlow(test.SonataFlowWithSubFlows, "my-namespace")
+	workflowRefs := FindWorkflowRefs(workflow)
+	assert.Len(t, workflowRefs, 15)
+	assertContainsWorkflowRef(t, workflowRefs, "useCallbackState.action.subflow", 2)
+	assertContainsWorkflowRef(t, workflowRefs, "useEventState.event1.action1.subflow1", 1)
+	assertContainsWorkflowRef(t, workflowRefs, "useEventState.event1.action2.subflow1", 1)
+	assertContainsWorkflowRef(t, workflowRefs, "useEventState.event2.action1.subflow1", 1)
+	assertContainsWorkflowRef(t, workflowRefs, "useEventState.event2.action2.subflow1", 1)
+	assertContainsWorkflowRef(t, workflowRefs, "useOperationState.action1.subflow1", 2)
+	assertContainsWorkflowRef(t, workflowRefs, "useOperationState.action2.subflow1", 1)
+	assertContainsWorkflowRef(t, workflowRefs, "useParallelState.branch1.action1.subflow1", 1)
+	assertContainsWorkflowRef(t, workflowRefs, "useParallelState.branch1.action2.subflow1", 1)
+	assertContainsWorkflowRef(t, workflowRefs, "useParallelState.branch2.action1.subflow1", 1)
+	assertContainsWorkflowRef(t, workflowRefs, "useForEachState.action1.subflow1", 1)
+	assertContainsWorkflowRef(t, workflowRefs, "useForEachState.action2.subflow1", 2)
+}
+
+func assertContainsWorkflowRef(t *testing.T, workflowRefs []*cncfmodel.WorkflowRef, workflowID string, expectedCount int) {
+	count := 0
+	for _, workflowRef := range workflowRefs {
+		if workflowRef.WorkflowID == workflowID {
+			count++
+		}
+	}
+	assert.Equal(t, expectedCount, count, "workflowID: \"%s\" was not found the expected number of times.", workflowID)
 }

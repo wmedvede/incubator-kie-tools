@@ -1,0 +1,104 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+apiVersion: sonataflow.org/v1alpha08
+kind: SonataFlow
+metadata:
+  name: sonataflow-with-subflows
+  annotations:
+    sonataflow.org/description: Main workflow (only for the utils.go tests)
+    sonataflow.org/version: 0.0.1
+  labels:
+    test: test
+spec:
+  flow:
+    start: UseCallbackState
+    events:
+      - name: useCallbackState.event
+        type: use_callback_state_event
+      - name: useEventState.event1
+        type: use_event_state_event1
+      - name: useEventState.event2
+        type: use_event_state_event2
+    states:
+      - name: UseCallbackState
+        type: callback
+        action:
+          name: useCallbackState.action
+          subFlowRef: useCallbackState.action.subflow
+        eventRef: useCallbackState.event
+        transition: UseEventState
+      - name: UseEventState
+        type: event
+        onEvents:
+          - eventRefs: [useEventState.event1]
+            actions:
+              - name: useEventState.event1.action1
+                subFlowRef: useEventState.event1.action1.subflow1
+              - name: useEventState.event1.action2
+                subFlowRef: useEventState.event1.action2.subflow1
+          - eventRefs: [useEventState.event2]
+            actions:
+              - name: useEventState.event2.action1
+                subFlowRef: useEventState.event2.action1.subflow1
+              - name: useEventState.event2.action2
+                subFlowRef: useEventState.event2.action2.subflow1
+        transition: UseOperationState
+      - name: UseOperationState
+        type: operation
+        actions:
+          - name: useOperationState.action1
+            subFlowRef: useOperationState.action1.subflow1
+          - name: useOperationState.action2
+            subFlowRef: useOperationState.action2.subflow1
+        transition: UseParallelState
+      - name: UseParallelState
+        type: parallel
+        branches:
+          - name: useParallelState.branch1
+            actions:
+              - name: useParallelState.branch1.action1
+                subFlowRef: useParallelState.branch1.action1.subflow1
+              - name: useParallelState.branch1.action2
+                subFlowRef: useParallelState.branch1.action2.subflow1
+          - name: useParallelState.branch2
+            actions:
+              - name: useParallelState.branch2.action1
+                subFlowRef: useParallelState.branch2.action1.subflow1
+        completionType: allOf
+        transition: UseForEachState
+      - name: UseForEachState
+        type: foreach
+        inputCollection: .input
+        iterationParam: item
+        mode: parallel
+        actions:
+          - name: useForEachState.action1
+            subFlowRef: useForEachState.action1.subflow1
+          - name: useForEachState.action2
+            subFlowRef: useForEachState.action2.subflow1
+        transition: ForceSubFlowRefRepetitions
+      - name: ForceSubFlowRefRepetitions
+        type: operation
+        actions:
+          - name: repeat1
+            subFlowRef: useCallbackState.action.subflow
+          - name: repeat2
+            subFlowRef: useOperationState.action1.subflow1
+          - name: repeat3
+            subFlowRef: useForEachState.action2.subflow1
+        end: true

@@ -33,11 +33,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/properties"
-
 	"k8s.io/klog/v2"
 
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/log"
 
 	v1 "k8s.io/api/core/v1"
@@ -94,7 +91,7 @@ func (d *DeploymentReconciler) reconcileWithImage(ctx context.Context, workflow 
 	if _, err := d.PerformStatusUpdate(ctx, workflow); err != nil {
 		return reconcile.Result{Requeue: false}, nil, err
 	}
-	d.scheduleWorkflowStatusChangeNotification(ctx, workflow)
+	d.scheduleWorkflowStatusChangeNotification(workflow)
 	return result, objs, nil
 }
 
@@ -224,7 +221,7 @@ func (d *DeploymentReconciler) updateLastTimeStatusNotified(workflow *operatorap
 	}
 }
 
-func (d *DeploymentReconciler) scheduleWorkflowStatusChangeNotification(ctx context.Context, workflow *operatorapi.SonataFlow) {
+func (d *DeploymentReconciler) scheduleWorkflowStatusChangeNotification(workflow *operatorapi.SonataFlow) {
 	if workflow.Status.LastTimeStatusNotified == nil {
 		manager.GetSFCWorker().RunAsync(func() {
 			if err := notifyWorkflowStatusChange(d.C, workflow.Name, workflow.Namespace); err != nil {
@@ -251,11 +248,7 @@ func notifyWorkflowStatusChange(cli client.Client, wfName, wfNamespace string) e
 			klog.V(log.D).Infof("No enabled DataIndex, nor Broker, nor Sink configuration was found to send the workflow definition status update event for workflow: %s, namespace: %s", workflow.Name, workflow.Namespace)
 			return nil
 		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), constants.EventDeliveryTimeout)
-		defer cancel()
-		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrl(workflow), available)
-		if err = utils.SendCloudEventWithContext(evt, ctx, uri); err != nil {
+		if err = common.SendWorkFlowDefinitionAndSubFlowsAvailabilityEvent(workflow, uri, available); err != nil {
 			return fmt.Errorf("failed to send workflow definition status update event: %v", err)
 			// Controller handle to program a new notification based on the LastTimeStatusNotified.
 		} else {

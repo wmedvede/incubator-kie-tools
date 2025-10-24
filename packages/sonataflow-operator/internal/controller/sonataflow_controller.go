@@ -23,18 +23,15 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common"
+
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/manager"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/eventing"
 
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils"
-
 	"k8s.io/client-go/util/retry"
-
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles/common/properties"
-	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
 
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -212,26 +209,20 @@ func scheduleWorkflowDeletionNotification(cli client.Client, workflow *operatora
 
 func notifyWorkflowDeletion(cli client.Client, workflow *operatorapi.SonataFlow, eventTargetUrl string) error {
 	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		var err error
-		evt := workflowdef.NewWorkflowDefinitionAvailabilityEvent(workflow, workflowdef.SonataFlowOperatorSource, properties.GetWorkflowEndpointUrlWithNameAndNamespace(workflow.Name, workflow.Namespace), false)
-		ctx, cancel := context.WithTimeout(context.Background(), constants.EventDeliveryTimeout)
-		defer cancel()
-
-		if err = utils.SendCloudEventWithContext(evt, ctx, eventTargetUrl); err != nil {
+		if err := common.SendWorkFlowDefinitionAndSubFlowsAvailabilityEvent(workflow, eventTargetUrl, false); err != nil {
 			// controller handles to program a new notification based on the remainder FinalizerAttempts if needed.
 			return fmt.Errorf("failed to send workflow definition status update event: %v", err)
 		}
-
 		wfName := workflow.Name
 		wfNamespace := workflow.Namespace
 		workflow = &operatorapi.SonataFlow{}
-		if err = cli.Get(context.Background(), types.NamespacedName{Name: wfName, Namespace: wfNamespace}, workflow); err != nil {
+		if err := cli.Get(context.Background(), types.NamespacedName{Name: wfName, Namespace: wfNamespace}, workflow); err != nil {
 			return err
 		}
 
 		workflow = workflow.DeepCopy()
 		workflow.Status.FinalizerSucceed = true
-		if err = cli.Status().Update(context.Background(), workflow); err != nil {
+		if err := cli.Status().Update(context.Background(), workflow); err != nil {
 			return err
 		}
 		return nil

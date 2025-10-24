@@ -52,6 +52,69 @@ func HasTimeouts(workflow *operatorapi.SonataFlow) bool {
 	return hasTimeouts
 }
 
+func FindWorkflowRefs(workflow *operatorapi.SonataFlow) []*model.WorkflowRef {
+	workflowRefs := make([]*model.WorkflowRef, 0)
+	for _, state := range workflow.Spec.Flow.States {
+		switch state.Type {
+		case model.StateTypeEvent:
+			workflowRefs = append(workflowRefs, FindEventStateWorkflowRefs(state.EventState)...)
+		case model.StateTypeOperation:
+			workflowRefs = append(workflowRefs, FindOperationStateWorkflowRefs(state.OperationState)...)
+		case model.StateTypeParallel:
+			workflowRefs = append(workflowRefs, FindParallelStateWorkflowRefs(state.ParallelState)...)
+		case model.StateTypeForEach:
+			workflowRefs = append(workflowRefs, FindForEachStateWorkflowRefs(state.ForEachState)...)
+		case model.StateTypeCallback:
+			if workflowRef := FindCallbackStateWorkflowRef(state.CallbackState); workflowRef != nil {
+				workflowRefs = append(workflowRefs, workflowRef)
+			}
+		}
+	}
+	return workflowRefs
+}
+
+func FindEventStateWorkflowRefs(state *model.EventState) []*model.WorkflowRef {
+	workflowRefs := make([]*model.WorkflowRef, 0)
+	for _, onEvent := range state.OnEvents {
+		workflowRefs = append(workflowRefs, FindActionsWorkflowRefs(&onEvent.Actions)...)
+	}
+	return workflowRefs
+}
+
+func FindOperationStateWorkflowRefs(state *model.OperationState) []*model.WorkflowRef {
+	return FindActionsWorkflowRefs(&state.Actions)
+}
+
+func FindParallelStateWorkflowRefs(state *model.ParallelState) []*model.WorkflowRef {
+	workflowRefs := make([]*model.WorkflowRef, 0)
+	for _, branch := range state.Branches {
+		workflowRefs = append(workflowRefs, FindActionsWorkflowRefs(&branch.Actions)...)
+	}
+	return workflowRefs
+}
+
+func FindForEachStateWorkflowRefs(state *model.ForEachState) []*model.WorkflowRef {
+	return FindActionsWorkflowRefs(&state.Actions)
+}
+
+func FindCallbackStateWorkflowRef(state *model.CallbackState) *model.WorkflowRef {
+	return state.Action.SubFlowRef
+}
+
+func FindActionsWorkflowRefs(actions *[]model.Action) []*model.WorkflowRef {
+	workflowRefs := make([]*model.WorkflowRef, 0)
+	for _, action := range *actions {
+		if workflowRef := GetActionWorkflowRef(&action); workflowRef != nil {
+			workflowRefs = append(workflowRefs, workflowRef)
+		}
+	}
+	return workflowRefs
+}
+
+func GetActionWorkflowRef(action *model.Action) *model.WorkflowRef {
+	return action.SubFlowRef
+}
+
 func HasWorkflowEventTimeout(flow *operatorapi.Flow) bool {
 	return flow.Timeouts != nil && len(flow.Timeouts.EventTimeout) > 0
 }

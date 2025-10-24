@@ -39,10 +39,45 @@ func NewWorkflowDefinitionAvailabilityEvent(workflow *operatorapi.SonataFlow, ev
 	event.SetExtension("partitionkey", workflow.Name)
 	data := make(map[string]interface{})
 	data["id"] = workflow.Name
+
+	/**
+	  Process definitions table
+	  id       varchar(255) not null,
+	  version  varchar(255) not null,
+	  name     varchar(255),
+	*/
 	if name, ok := workflow.ObjectMeta.Annotations[metadata.Name]; ok {
+		// If no annotation we don't set it, the runtime wins.
+		// for the subflows we have that:
+		// same criteria
+		// Here we have two situations.
+		// 1
 		data["name"] = name
 	}
 	version := workflow.ObjectMeta.Annotations[metadata.Version]
+	data["version"] = version
+	data["type"] = "SW"
+	data["endpoint"] = serviceUrl
+	data["metadata"] = map[string]interface{}{
+		"status": status,
+	}
+	data["nodes"] = [0]string{}
+	_ = event.SetData(cloudevents.ApplicationJSON, data)
+	return &event
+}
+
+func NewSubFlowAvailabilityEvent(subflowId, version, eventSource string, serviceUrl string, available bool) *cloudevents.Event {
+	var status = "unavailable"
+	if available {
+		status = "available"
+	}
+	event := cloudevents.NewEvent(cloudevents.VersionV1)
+	event.SetType("ProcessDefinitionEvent")
+	event.SetSource(eventSource)
+	event.SetExtension("kogitoprocid", subflowId)
+	event.SetExtension("partitionkey", subflowId)
+	data := make(map[string]interface{})
+	data["id"] = subflowId
 	data["version"] = version
 	data["type"] = "SW"
 	data["endpoint"] = serviceUrl
