@@ -209,7 +209,7 @@ func scheduleWorkflowDeletionNotification(cli client.Client, workflow *operatora
 
 func notifyWorkflowDeletion(cli client.Client, workflow *operatorapi.SonataFlow, eventTargetUrl string) error {
 	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		if err := common.SendWorkFlowDefinitionAndSubFlowsAvailabilityEvent(workflow, eventTargetUrl, false); err != nil {
+		if err := common.SendWorkFlowAndSubFlowsDefinitionAvailabilityEvents(workflow, eventTargetUrl, false); err != nil {
 			// controller handles to program a new notification based on the remainder FinalizerAttempts if needed.
 			return fmt.Errorf("failed to send workflow definition status update event: %v", err)
 		}

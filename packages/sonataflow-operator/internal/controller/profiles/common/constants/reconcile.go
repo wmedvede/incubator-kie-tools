@@ -39,4 +39,5 @@ const (
 	WorkflowFinalizerSchedulingRetryInterval = 5 * time.Second
 	// EventDeliveryTimeout delivery timeout for the cloud events produced by the operator.
 	EventDeliveryTimeout = 30 * time.Second
+	ImageReadTimeout     = 90 * time.Second
 )

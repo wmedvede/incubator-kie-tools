@@ -224,6 +224,7 @@ func (d *DeploymentReconciler) updateLastTimeStatusNotified(workflow *operatorap
 func (d *DeploymentReconciler) scheduleWorkflowStatusChangeNotification(workflow *operatorapi.SonataFlow) {
 	if workflow.Status.LastTimeStatusNotified == nil {
 		manager.GetSFCWorker().RunAsync(func() {
+			fmt.Printf("XXXXXXXXXXXXXXXXXXXXXXX  scheduleWorkflowStatusChangeNotification \n")
 			if err := notifyWorkflowStatusChange(d.C, workflow.Name, workflow.Namespace); err != nil {
 				klog.V(log.E).ErrorS(err, "Failed to notify workflow status change, controller will schedule a new retry.", "workflow", "namespace", workflow.Name, workflow.Namespace, err)
 			}
@@ -248,7 +249,7 @@ func notifyWorkflowStatusChange(cli client.Client, wfName, wfNamespace string) e
 			klog.V(log.D).Infof("No enabled DataIndex, nor Broker, nor Sink configuration was found to send the workflow definition status update event for workflow: %s, namespace: %s", workflow.Name, workflow.Namespace)
 			return nil
 		}
-		if err = common.SendWorkFlowDefinitionAndSubFlowsAvailabilityEvent(workflow, uri, available); err != nil {
+		if err = common.SendWorkFlowAndSubFlowsDefinitionAvailabilityEvents(workflow, uri, available); err != nil {
 			return fmt.Errorf("failed to send workflow definition status update event: %v", err)
 			// Controller handle to program a new notification based on the LastTimeStatusNotified.
 		} else {
@@ -259,7 +260,16 @@ func notifyWorkflowStatusChange(cli client.Client, wfName, wfNamespace string) e
 				return err
 			}
 		}
+
+		//readWorkflowsFromImage("quay.io/wmedvede/serverless-workflow-operator-subflows:1.0-main-00")
+
+		readWorkflowsFromImage("registry.redhat.io/rhel8/postgresql-15")
+
 		return nil
 	})
 	return retryErr
+}
+
+func readWorkflowsFromImage(imageName string) {
+	common.ReadWorkflowFilesFromImage(context.Background(), utils.GetKubernetesClient(), imageName, "sonataflow-operator-system", "sonataflow-operator-controller-manager", []string{"external-pull-secret"}, common.ServerlessWorkflowProjectJarPattern)
 }

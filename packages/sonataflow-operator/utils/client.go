@@ -20,6 +20,7 @@ package utils
 import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -27,6 +28,7 @@ import (
 var k8sClient client.Client
 var k8sDynamicClient *dynamic.DynamicClient
 var discoveryClient discovery.DiscoveryInterface
+var kubernetesClient kubernetes.Interface
 
 // TODO: consider refactor the internals as we progress adding features to rely on this client instead of passing it through all the functions
 
@@ -65,4 +67,15 @@ func GetDiscoveryClient(cfg *rest.Config) (discovery.DiscoveryInterface, error) 
 
 func SetDiscoveryClient(cli discovery.DiscoveryInterface) {
 	discoveryClient = cli
+}
+
+// SetKubernetesClient intended to be called by the main operator's thread.
+func SetKubernetesClient(cli kubernetes.Interface) {
+	kubernetesClient = cli
+}
+
+// GetKubernetesClient default kubernetes client is created by the main operator's thread.
+// It's safe to use since it's set when the operator main function runs.
+func GetKubernetesClient() kubernetes.Interface {
+	return kubernetesClient
 }

@@ -26,12 +26,6 @@ import (
 	cehttp "github.com/cloudevents/sdk-go/v2/protocol/http"
 )
 
-// SendCloudEvent Sends a cloud event to the given url using the http protocol binding. By default, events are sent in
-// binary mode.
-func SendCloudEvent(event *cloudevents.Event, url string) error {
-	return SendCloudEventWithContext(event, context.TODO(), url)
-}
-
 // SendCloudEventWithContext Sends a cloud event to the given url using the http protocol binding. By default, events
 // are sent in binary mode.
 func SendCloudEventWithContext(event *cloudevents.Event, ctx context.Context, url string) error {

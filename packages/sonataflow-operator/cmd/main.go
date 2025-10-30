@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"os"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/version"
 
 	"k8s.io/client-go/dynamic"
@@ -78,6 +80,8 @@ func init() {
 }
 
 func main() {
+
+	fmt.Printf("VAMOS 28/10/2025\n")
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
@@ -158,6 +162,13 @@ func main() {
 		panic(fmt.Sprintf("Impossible to get new dynamic client for config to support controller operations: %s", err))
 	}
 	utils.SetDynamicClient(cli)
+
+	kubernetesCli, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		// shouldn't fail, since config is provided by the cluster, if fails, the Dynamic client instantiation should probably fail before.
+		panic(fmt.Sprintf("Impossible to get new kubernetes client for config to support controller operations: %s", err))
+	}
+	utils.SetKubernetesClient(kubernetesCli)
 
 	// Fail fast, we can change this behavior in the future to read from defaults instead.
 	if _, err = cfg.InitializeControllersCfgAt(controllerCfgPath); err != nil {
