@@ -20,6 +20,7 @@ package common
 import (
 	"context"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/klog/v2"
 
@@ -64,12 +65,29 @@ func GetOperatorPullSecrets() []string {
 	return []string{"external-pull-secret"}
 }
 
+func LocalObjectRefsAsArray(localObjectRefs *[]corev1.LocalObjectReference) []string {
+	if localObjectRefs == nil {
+		return []string{}
+	}
+	stringRefs := make([]string, len(*localObjectRefs))
+	for _, localRef := range *localObjectRefs {
+		stringRefs = append(stringRefs, localRef.Name)
+	}
+	return stringRefs
+}
+
 func SendWorkFlowAndSubFlowsDefinitionAvailabilityEvents(workflow *operatorapi.SonataFlow, eventTargetUrl string, available bool) error {
+	//TODO. for gitops profile workflows we just pick the image from the podTemplate.
+	//for preview profile workflows we can use workflowdef.GetWorkflowAppImageNameTag(workflow) if we are in Openshift
+	//see openshiftbuilder.go
+	//Or buildNamespacedImageTag if we are in regular kubernetes cluster, see containerbuilder.go
 	imageRef := workflow.Spec.PodTemplate.Container.Image
-	// Get the imagePullSecrets and the serviceAccountName the WF instead?
-	// imagePullSecrets = workflow.Spec.PodTemplate.ImagePullSecrets        //If not set, OpenShift configures one like:   imagePullSecrets:  - name: default-dockercfg-2b5zb
-	// we should probably get it from the POD in these cases.
-	// serviceAccountName := workflow.Spec.PodTemplate.ServiceAccountName   //If not set, the value is default
+	serviceAccountName := workflow.Spec.PodTemplate.ServiceAccountName
+	if len(serviceAccountName) == 0 {
+		serviceAccountName = "default"
+	}
+	imagePullSecrets := LocalObjectRefsAsArray(&workflow.Spec.PodTemplate.ImagePullSecrets)
+
 	var ctx context.Context
 	var cancel context.CancelFunc
 
@@ -88,7 +106,7 @@ func SendWorkFlowAndSubFlowsDefinitionAvailabilityEvents(workflow *operatorapi.S
 	}
 	if len(subFlows) > 0 {
 		ctx, cancel = context.WithTimeout(context.Background(), constants.ImageReadTimeout)
-		files, err := ReadWorkflowFilesFromImage(ctx, utils.GetKubernetesClient(), imageRef, GetOperatorNamespace(), GetOperatorServiceAccount(), GetOperatorPullSecrets(), ServerlessWorkflowProjectJarPattern)
+		files, err := ReadWorkflowFilesFromImage(ctx, utils.GetKubernetesClient(), imageRef, workflow.Namespace, serviceAccountName, imagePullSecrets, ServerlessWorkflowProjectJarPattern)
 		if err != nil {
 			cancel()
 			return fmt.Errorf("failed to read workflow files from image: %s, %w", imageRef, err)

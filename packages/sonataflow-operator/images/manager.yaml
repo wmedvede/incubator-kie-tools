@@ -34,6 +34,7 @@
 - name: sonataflow-operator
   version: 0.0.0
   from: "registry.access.redhat.com/ubi9/ubi-micro:9.5"
+  #from: "registry.access.redhat.com/ubi9/ubi-minimal:9.5"
   description: Runtime Image for the Operator
 
   args:
@@ -43,6 +44,14 @@
   labels:
     - name: maintainer
       value: dev@kie.apache.org
+
+  # WM, experimental adding to make the operator image have the RH CA certificates installed.
+  # However, this was finally not needed.
+  #  modules:
+  #    repositories:
+  #      - path: modules
+  #    install:
+  #      - name: org.apache.kie.sonataflow.caCertificates
 
   artifacts:
     - path: /workspace/manager
