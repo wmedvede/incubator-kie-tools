@@ -101,6 +101,8 @@ func (action *serviceAction) Handle(ctx context.Context, platform *operatorapi.S
 }
 
 func createOrUpdateServiceComponents(ctx context.Context, client client.Client, platform *operatorapi.SonataFlowPlatform, psh services.PlatformServiceHandler) (*corev1.Event, error) {
+	klog.V(log.D).Infof("XXX createOrUpdateServiceComponents: sfp %s/%s", platform.Namespace, platform.Name)
+
 	if err := createOrUpdateConfigMap(ctx, client, platform, psh); err != nil {
 		return nil, err
 	}
@@ -161,20 +163,22 @@ func createOrUpdateDeployment(ctx context.Context, client client.Client, platfor
 	// immutable
 	serviceContainer.Name = psh.GetContainerName()
 
-	replicas := psh.GetReplicaCount()
+	hpaExists := false
+	if psh.AcceptsHPA() {
+		if hpaExists, err = hpaExistsForDeployment(ctx, utils.GetClient(), platform.Namespace, psh.GetServiceName()); err != nil {
+			return fmt.Errorf("failed to query if HorizontalPodAutoscaler exists for deployment %s/%s: %v", platform.Namespace, psh.GetServiceName(), err)
+		}
+		klog.V(log.D).Infof("HorizontalPodAutoscaler exists for deployment %s/%s: %t.", platform.Namespace, psh.GetServiceName(), hpaExists)
+	}
 	kSinkInjected, err := psh.CheckKSinkInjected()
 	if err != nil {
 		return nil
-	}
-	if !kSinkInjected {
-		replicas = 0 // Wait for K_SINK injection
 	}
 	lbl, selectorLbl := getLabels(platform, psh)
 	serviceDeploymentSpec := appsv1.DeploymentSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: selectorLbl,
 		},
-		Replicas: &replicas,
 		Strategy: psh.GetDeploymentStrategy(),
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
@@ -219,7 +223,18 @@ func createOrUpdateDeployment(ctx context.Context, client client.Client, platfor
 		err := mergo.Merge(&(serviceDeployment.Spec), serviceDeploymentSpec, mergo.WithOverride)
 		// mergo.Merge algorithm is not setting the serviceDeployment.Spec.Replicas when the
 		// *serviceDeploymentSpec.Replicas is 0. Making impossible to scale to zero. Ensure the value.
-		serviceDeployment.Spec.Replicas = serviceDeploymentSpec.Replicas
+		if !hpaExists {
+			// Only when no HorizontalPodAutoscaler was created for current deployment, we can manage the replicas.
+			// Otherwise, it is his responsibility.
+			replicas := psh.GetReplicaCount()
+			if !kSinkInjected {
+				// TODO WM chequear ésto..... para el caso donde si hay HPA.
+				// como convive el PHA con el K_SINK. wow! por ahora es solo para el JS y no va de momento :)
+				// Podria basicamente poner en true el JS y probarlo.!
+				replicas = 0 // Wait for K_SINK injection
+			}
+			serviceDeployment.Spec.Replicas = &replicas
+		}
 		if err != nil {
 			return err
 		}

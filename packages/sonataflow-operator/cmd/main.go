@@ -78,6 +78,7 @@ func init() {
 }
 
 func main() {
+	fmt.Printf("Vamos 23-01-2026 1\n")
 	var metricsAddr string
 	var enableLeaderElection bool
 	var leaseDuration *time.Duration
@@ -149,6 +150,12 @@ func main() {
 	config.QPS = float32(*qps)
 	config.Burst = *burst
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
+		// TODO WM, experiment to keep the HorizontalPodAutoscaler out of the cache if needed.
+		//Client: client.Options{
+		//	Cache: &client.CacheOptions{
+		//		DisableFor: []client.Object{&autoscalingv1.HorizontalPodAutoscaler{}},
+		//	},
+		//},
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress:   metricsAddr,
