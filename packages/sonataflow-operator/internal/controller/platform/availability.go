@@ -37,6 +37,9 @@ func hpaExistsForDeployment(ctx context.Context, c client.Client, namespace stri
 	return hpa != nil, err
 }
 
+// findHPAForDeployment returns the HorizontalPodAutoscaler targeting a deployment in a given namespace, or nil if it
+// doesn't exist.
+// Note: By k8s definition, the HorizontalPodAutoscaler must belong to the same namespace as the managed deployment.
 func findHPAForDeployment(ctx context.Context, c client.Client, namespace string, name string) (*autoscalingv2.HorizontalPodAutoscaler, error) {
 	klog.V(log.D).Infof("Querying HorizontalPodAutoscalers in namespace: %s", namespace)
 	var hpaList autoscalingv2.HorizontalPodAutoscalerList
@@ -66,4 +69,11 @@ func hpaIsActive(hpa *autoscalingv2.HorizontalPodAutoscaler) bool {
 		}
 	}
 	return false
+}
+
+// hpaIsWorking returns true if the HorizontalPodAutoscaler has started to take care of the scaling for the
+// corresponding target ref. At this point, our controllers must transfer the control to the HorizontalPodAutoscaler
+// and let it manage the replicas.
+func hpaIsWorking(hpa *autoscalingv2.HorizontalPodAutoscaler) bool {
+	return hpaIsActive(hpa) || hpa.Status.DesiredReplicas > 0
 }
