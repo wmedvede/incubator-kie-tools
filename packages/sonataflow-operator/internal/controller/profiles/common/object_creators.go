@@ -24,6 +24,10 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/klog/v2"
+
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/log"
+
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles"
 
 	servingv1 "knative.dev/serving/pkg/apis/serving/v1"
@@ -105,7 +109,7 @@ func DeploymentCreator(workflow *operatorapi.SonataFlow, plf *operatorapi.Sonata
 			Labels:    lbl,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: getReplicasOrDefault(workflow),
+			Replicas: GetReplicasOrDefault(workflow),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: workflowproj.GetSelectorLabels(workflow),
 			},
@@ -165,11 +169,14 @@ func KServiceCreator(workflow *operatorapi.SonataFlow, plf *operatorapi.SonataFl
 	return ksvc, nil
 }
 
-func getReplicasOrDefault(workflow *operatorapi.SonataFlow) *int32 {
+func GetReplicasOrDefault(workflow *operatorapi.SonataFlow) *int32 {
+	klog.V(log.D).Infof("Calculating GetReplicasOrDefault")
 	var dReplicas int32 = 1
 	if workflow.Spec.PodTemplate.Replicas == nil {
+		klog.V(log.D).Infof("workflow.Spec.PodTemplate.Replicas is nil")
 		return &dReplicas
 	}
+	klog.V(log.D).Infof("Setting workflow.Spec.PodTemplate.Replicas as is")
 	return workflow.Spec.PodTemplate.Replicas
 }
 

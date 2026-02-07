@@ -78,7 +78,7 @@ func init() {
 }
 
 func main() {
-	fmt.Printf("Vamos 23-01-2026 1\n")
+	fmt.Printf("Vamos 07-02-2026 1\n")
 	var metricsAddr string
 	var enableLeaderElection bool
 	var leaseDuration *time.Duration

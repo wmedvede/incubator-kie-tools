@@ -231,6 +231,7 @@ func createOrUpdateDeployment(ctx context.Context, client client.Client, platfor
 			// Or, when the existing one did not wake up from a previous inactive period due to a replicas set to 0.
 			// In this last case, we should still let the controller the chance to set the replicas to make
 			// HorizontalPodAutoscaler wake up.
+			// Or, when the user voluntary wants to set the replicas to 0.
 			replicas := psh.GetReplicaCount()
 			if !kSinkInjected {
 				replicas = 0 // Wait for K_SINK injection

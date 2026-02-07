@@ -235,14 +235,13 @@ func (d *DeploymentReconciler) scheduleWorkflowStatusChangeNotification(ctx cont
 }
 
 func notifyWorkflowStatusChange(cli client.Client, wfName, wfNamespace string) error {
-	var err error
-	var uri string
 	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		var err error
+		var uri string
 		workflow := &operatorapi.SonataFlow{}
 		if err = cli.Get(context.Background(), types.NamespacedName{Name: wfName, Namespace: wfNamespace}, workflow); err != nil {
 			return err
 		}
-		workflow = workflow.DeepCopy()
 		available := workflow.Status.GetCondition(api.RunningConditionType).IsTrue()
 		if uri, err = eventing.GetWorkflowDefinitionEventsTargetURL(cli, workflow); err != nil {
 			return fmt.Errorf("failed to get workflow definition events target url to send the workflow definition status update event: %v", err)
@@ -262,6 +261,10 @@ func notifyWorkflowStatusChange(cli client.Client, wfName, wfNamespace string) e
 			now := metav1.Now()
 			// Register the LastTimeStatusNotified, the controller knows how to react based on that value.
 			workflow.Status.LastTimeStatusNotified = &now
+			// TODO WM remove this comment or review!
+			// Pareceria que ésto me generaba un evento en el sonataflow-controller que no me
+			// interesaba procesar y por eso fue que puse el filtro por el old.generation != new.generation.
+
 			if err = cli.Status().Update(context.Background(), workflow); err != nil {
 				return err
 			}
