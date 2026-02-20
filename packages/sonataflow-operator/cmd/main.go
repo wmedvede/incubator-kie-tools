@@ -78,6 +78,7 @@ func init() {
 }
 
 func main() {
+	fmt.Printf("25-02-2026 PDB 3 vamo!\n")
 	var metricsAddr string
 	var enableLeaderElection bool
 	var leaseDuration *time.Duration
