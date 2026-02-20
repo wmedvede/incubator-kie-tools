@@ -24,6 +24,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils/kubernetes"
+
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	pkgbuilder "sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	v1 "k8s.io/api/policy/v1"
+
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/manager"
 
@@ -72,6 +80,8 @@ import (
 
 	operatorapi "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/platform"
+
+	ctrlevent "sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 // SonataFlowReconciler reconciles a SonataFlow object
@@ -88,6 +98,7 @@ type SonataFlowReconciler struct {
 //+kubebuilder:rbac:groups=sonataflow.org,resources=sonataflows/finalizers,verbs=update
 //+kubebuilder:rbac:groups="monitoring.coreos.com",resources=servicemonitors,verbs=get;list;watch;create;update;delete
 //+kubebuilder:rbac:groups="serving.knative.dev",resources=revisions,verbs=list;watch;delete
+//+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -98,7 +109,8 @@ type SonataFlowReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
+	// TODO WM
+	klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX Starting recon cycle: %s/%s", req.Namespace, req.Name)
 	// Make sure the operator is allowed to act on namespace
 	if ok, err := platform.IsOperatorAllowedOnNamespace(ctx, r.Client, req.Namespace); err != nil {
 		return reconcile.Result{}, err
@@ -374,6 +386,7 @@ func (r *SonataFlowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&operatorapi.SonataFlow{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&v1.PodDisruptionBudget{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&operatorapi.SonataFlowBuild{}).
@@ -392,7 +405,8 @@ func (r *SonataFlowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return []reconcile.Request{}
 			}
 			return buildEnqueueRequestsFromMapFunc(mgr.GetClient(), build)
-		}))
+		})).
+		Watches(&autoscalingv2.HorizontalPodAutoscaler{}, handler.EnqueueRequestsFromMapFunc(r.mapHPAToSonataFlowRequests), pkgbuilder.WithPredicates(hpaToSonataFlowPredicate()))
 
 	knativeAvail, err := knative.GetKnativeAvailability(mgr.GetConfig())
 	if err != nil {
@@ -415,4 +429,44 @@ func (r *SonataFlowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return builder.Complete(r)
+}
+
+// hpaToSonataFlowPredicate filters the HorizontalPodAutoscaler events that might require attention by the SonataFlow
+// controller, i.e., those HorizontalPodAutoscalers that points to a SonataFlow and has relevant changes rather than
+// status updates. Note that changes in such HorizontalPodAutoscaler might for example have impact on the potentially
+// generated PodDisruptionBudget.
+func hpaToSonataFlowPredicate() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(e ctrlevent.CreateEvent) bool {
+			return kubernetes.IsHPAndTargetsASonataFlowAsBool(e.Object)
+		},
+		UpdateFunc: func(e ctrlevent.UpdateEvent) bool {
+			oldHpa, oldHpaOk := kubernetes.IsHPAndTargetsASonataFlow(e.ObjectOld)
+			newHpa, newHpaOK := kubernetes.IsHPAndTargetsASonataFlow(e.ObjectNew)
+			if oldHpaOk || newHpaOK {
+				return !kubernetes.HPAEqualsBySpec(oldHpa, newHpa)
+			}
+			return false
+		},
+		DeleteFunc: func(e ctrlevent.DeleteEvent) bool {
+			return kubernetes.IsHPAndTargetsASonataFlowAsBool(e.Object)
+		},
+		GenericFunc: func(e ctrlevent.GenericEvent) bool {
+			return kubernetes.IsHPAndTargetsASonataFlowAsBool(e.Object)
+		},
+	}
+}
+
+// mapHPAToSonataFlowRequests given a HorizontalPodAutoscaler that targets a SonataFlow, returns the recon request to
+// that workflow.
+func (r *SonataFlowReconciler) mapHPAToSonataFlowRequests(ctx context.Context, object client.Object) []reconcile.Request {
+	hpa := object.(*autoscalingv2.HorizontalPodAutoscaler)
+	return []reconcile.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Namespace: hpa.Namespace,
+				Name:      hpa.Spec.ScaleTargetRef.Name,
+			},
+		},
+	}
 }
