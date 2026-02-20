@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"time"
 
+	v1 "k8s.io/api/policy/v1"
+
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/manager"
 
@@ -88,6 +90,7 @@ type SonataFlowReconciler struct {
 //+kubebuilder:rbac:groups=sonataflow.org,resources=sonataflows/finalizers,verbs=update
 //+kubebuilder:rbac:groups="monitoring.coreos.com",resources=servicemonitors,verbs=get;list;watch;create;update;delete
 //+kubebuilder:rbac:groups="serving.knative.dev",resources=revisions,verbs=list;watch;delete
+//+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -374,6 +377,7 @@ func (r *SonataFlowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&operatorapi.SonataFlow{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&v1.PodDisruptionBudget{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&operatorapi.SonataFlowBuild{}).

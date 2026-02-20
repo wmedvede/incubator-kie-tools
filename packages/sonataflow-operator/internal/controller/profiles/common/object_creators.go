@@ -24,6 +24,12 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/klog/v2"
+
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/log"
+
+	policyv1 "k8s.io/api/policy/v1"
+
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/profiles"
 
 	servingv1 "knative.dev/serving/pkg/apis/serving/v1"
@@ -464,4 +470,26 @@ func ServiceMonitorCreator(workflow *operatorapi.SonataFlow) (client.Object, err
 		Spec: *spec,
 	}
 	return serviceMonitor, nil
+}
+
+func PodDisruptionBudgetCreator(workflow *operatorapi.SonataFlow) (client.Object, error) {
+	klog.V(log.D).Infof("PodDisruptionBudgetCreator 1, con chicha: %s\n", workflow.Spec.PodTemplate.PodDisruptionBudget.MinAvailable)
+	lbl := workflowproj.GetMergedLabels(workflow)
+	podDisruptionBudget := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      workflow.Name,
+			Namespace: workflow.Namespace,
+			Labels:    lbl,
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MinAvailable: workflow.Spec.PodTemplate.PodDisruptionBudget.MinAvailable,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: workflowproj.GetSelectorLabels(workflow),
+			},
+			MaxUnavailable: workflow.Spec.PodTemplate.PodDisruptionBudget.MaxUnavailable,
+		},
+	}
+	klog.V(log.D).Infof("PodDisruptionBudgetCreator 2\n")
+
+	return podDisruptionBudget, nil
 }

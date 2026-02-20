@@ -17,7 +17,10 @@
 
 package v1alpha08
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+)
 
 // ContainerSpec is the container for the internal deployments based on the default Kubernetes Container API
 type ContainerSpec struct {
@@ -530,6 +533,24 @@ func (f *PodSpec) ToPodSpec() corev1.PodSpec {
 		SchedulingGates:               f.SchedulingGates,
 		ResourceClaims:                f.ResourceClaims,
 	}
+}
+
+// PodDisruptionBudgetSpec describes the Kubernetes pod disruption configuration for the SonataFlow and supporting
+// services pods.
+type PodDisruptionBudgetSpec struct {
+	// An eviction is allowed if at least "minAvailable" pods selected by
+	// "selector" will still be available after the eviction, i.e. even in the
+	// absence of the evicted pod.  So for example you can prevent all voluntary
+	// evictions by specifying "100%".
+	// +optional
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty" protobuf:"bytes,1,opt,name=minAvailable"`
+
+	// An eviction is allowed if at most "maxUnavailable" pods selected by
+	// "selector" are unavailable after the eviction, i.e. even in absence of
+	// the evicted pod. For example, one can prevent all voluntary evictions
+	// by specifying 0. This is a mutually exclusive setting with "minAvailable".
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty" protobuf:"bytes,3,opt,name=maxUnavailable"`
 }
 
 // PodTemplateSpec describes the desired custom Kubernetes PodTemplate definition for the deployed flow or service.
