@@ -77,15 +77,12 @@ type defaultObjectEnsurer struct {
 }
 
 func (d *defaultObjectEnsurer) Ensure(ctx context.Context, workflow *operatorapi.SonataFlow, visitors ...MutateVisitor) (client.Object, controllerutil.OperationResult, error) {
-	klog.V(log.D).Infof("Ensureando 1\n")
 	result := controllerutil.OperationResultNone
-	klog.V(log.D).Infof("Ensureando 2\n")
+
 	object, err := d.creator(workflow)
-	klog.V(log.D).Infof("Ensureando 3\n")
 	if err != nil || object == nil {
 		return nil, result, err
 	}
-	klog.V(log.D).Infof("Ensureando 4\n")
 	return ensureObject(ctx, workflow, visitors, result, d.c, object)
 }
 
@@ -223,20 +220,11 @@ func setWorkflowFinalizer(ctx context.Context, c client.Client, workflow *operat
 func ensureObject(ctx context.Context, workflow *operatorapi.SonataFlow, visitors []MutateVisitor, result controllerutil.OperationResult, c client.Client, object client.Object) (client.Object, controllerutil.OperationResult, error) {
 	if result, err := controllerutil.CreateOrPatch(ctx, c, object,
 		func() error {
-			klog.V(log.D).Infof("Ensureando.ensureObject 1, con visitors: %d, kind: %s\n", len(visitors), object.GetObjectKind())
 			for _, v := range visitors {
-				klog.V(log.D).Infof("VAMOS CON LOS VISITORS\n")
-
-				if v == nil {
-					klog.V(log.D).Infof("CUIDAOOOOOO! hay un vistor nulo!\n")
-				}
 				if visitorErr := v(object)(); visitorErr != nil {
-					klog.V(log.D).Infof("HAY VISOTOR ERRROR\n")
-
 					return visitorErr
 				}
 			}
-			klog.V(log.D).Infof("Ensureando.ensureObject 2\n")
 			if trigger, ok := object.(*eventingv1.Trigger); ok {
 				addToSonataFlowTriggerList(workflow, trigger)
 				if workflow.Namespace != object.GetNamespace() {
@@ -245,12 +233,10 @@ func ensureObject(ctx context.Context, workflow *operatorapi.SonataFlow, visitor
 					return setWorkflowFinalizer(ctx, c, workflow)
 				}
 			}
-			klog.V(log.D).Infof("Ensureando.ensureObject 3\n")
 			return controllerutil.SetControllerReference(workflow, object, c.Scheme())
 		}); err != nil {
 		return nil, result, err
 	}
-	klog.V(log.D).Infof("Ensureando.ensureObject 4\n")
 	klog.V(log.I).InfoS("Object operation finalized", "result", result, "kind", object.GetObjectKind().GroupVersionKind().String(), "name", object.GetName(), "namespace", object.GetNamespace())
 	return object, result, nil
 }

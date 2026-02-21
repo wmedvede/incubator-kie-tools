@@ -165,7 +165,7 @@ func createOrUpdateDeployment(ctx context.Context, client client.Client, platfor
 
 	var hpa *v2.HorizontalPodAutoscaler = nil
 	if psh.AcceptsHPA() {
-		hpa, err = findHPAForDeployment(ctx, utils.GetClient(), platform.Namespace, psh.GetServiceName())
+		hpa, err = kubeutil.FindHPAForDeployment(ctx, utils.GetClient(), platform.Namespace, psh.GetServiceName())
 		if err != nil {
 			return fmt.Errorf("failed to find a potential HorizontalPodAutoscaler for deployment %s/%s: %v", platform.Namespace, psh.GetServiceName(), err)
 		}
@@ -224,7 +224,7 @@ func createOrUpdateDeployment(ctx context.Context, client client.Client, platfor
 		err := mergo.Merge(&(serviceDeployment.Spec), serviceDeploymentSpec, mergo.WithOverride)
 		// mergo.Merge algorithm is not setting the serviceDeployment.Spec.Replicas when the
 		// *serviceDeploymentSpec.Replicas is 0. Making impossible to scale to zero. Ensure the value.
-		if hpa == nil || !hpaIsWorking(hpa) || psh.GetReplicaCount() == 0 {
+		if hpa == nil || !kubeutil.HPAIsWorking(hpa) || psh.GetReplicaCount() == 0 {
 			// Only when no HorizontalPodAutoscaler was created for current deployment, we should manage the replicas.
 			// Or, when the existing one did not wake up from a previous inactive period due to a replicas set to 0.
 			// In this last case, we should still let the controller the chance to set the replicas to wake up the HorizontalPodAutoscaler.

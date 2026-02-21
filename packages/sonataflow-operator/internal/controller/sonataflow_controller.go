@@ -22,7 +22,12 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
+
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	pkgbuilder "sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	v1 "k8s.io/api/policy/v1"
 
@@ -74,6 +79,8 @@ import (
 
 	operatorapi "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/platform"
+
+	ctrlevent "sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 // SonataFlowReconciler reconciles a SonataFlow object
@@ -101,7 +108,8 @@ type SonataFlowReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *SonataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
+	// TODO WM
+	klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX Starting recon cycle: %s/%s", req.Namespace, req.Name)
 	// Make sure the operator is allowed to act on namespace
 	if ok, err := platform.IsOperatorAllowedOnNamespace(ctx, r.Client, req.Namespace); err != nil {
 		return reconcile.Result{}, err
@@ -396,7 +404,8 @@ func (r *SonataFlowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return []reconcile.Request{}
 			}
 			return buildEnqueueRequestsFromMapFunc(mgr.GetClient(), build)
-		}))
+		})).
+		Watches(&autoscalingv2.HorizontalPodAutoscaler{}, handler.EnqueueRequestsFromMapFunc(r.mapHPAToSonataFlowRequests), pkgbuilder.WithPredicates(hpaToSonataFlowPredicate()))
 
 	knativeAvail, err := knative.GetKnativeAvailability(mgr.GetConfig())
 	if err != nil {
@@ -419,4 +428,72 @@ func (r *SonataFlowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return builder.Complete(r)
+}
+
+// hpaToSonataFlowPredicate filters the HorizontalPodAutoscaler events that might require attention by the SonataFlow
+// controller, i.e., those HorizontalPodAutoscalers that points to a SonataFlow and has relevant changes rather than
+// status updates.
+func hpaToSonataFlowPredicate() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(e ctrlevent.CreateEvent) bool {
+			printando(e.Object, "CreateEvent")
+			return hpaTargetsASonataFlow(e.Object)
+		},
+		UpdateFunc: func(e ctrlevent.UpdateEvent) bool {
+			printando(e.ObjectNew, "UpdateEvent")
+			// only care about changes in the HorizontalPodAutoscalers that points to a SonataFlow, and has changes
+			// in the Spec.
+			if hpaTargetsASonataFlow(e.ObjectOld) {
+				oldHpa := e.ObjectOld.(*autoscalingv2.HorizontalPodAutoscaler)
+				newHpa := e.ObjectNew.(*autoscalingv2.HorizontalPodAutoscaler)
+				result := !reflect.DeepEqual(oldHpa.Spec, newHpa.Spec)
+				//TODO WM
+				klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX HPA Point to workflow and Spec changed: %t", result)
+				return !reflect.DeepEqual(oldHpa.Spec, newHpa.Spec)
+			}
+			return false
+		},
+		DeleteFunc: func(e ctrlevent.DeleteEvent) bool {
+			printando(e.Object, "DeleteEvent")
+			return hpaTargetsASonataFlow(e.Object)
+		},
+		GenericFunc: func(e ctrlevent.GenericEvent) bool {
+			printando(e.Object, "GenericEvent")
+			return hpaTargetsASonataFlow(e.Object)
+		},
+	}
+}
+
+func printando(obj client.Object, event string) {
+	hpaRemove, removeMe := obj.(*autoscalingv2.HorizontalPodAutoscaler)
+	if !removeMe {
+		klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX Cuidao papa, el cast dio errores")
+	}
+	klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX Chequeando HPA para el evento: %s, - %s/%s -> %s\n", event, hpaRemove.Namespace, hpaRemove.Namespace, hpaRemove.Spec.ScaleTargetRef.Kind)
+}
+
+// hpaTargetsASonataFlow returns true if the Object obj is a HorizontalPodAutoscaler and targets a SonataFlow, false in
+// any other case.
+func hpaTargetsASonataFlow(obj client.Object) bool {
+	if hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler); ok {
+		klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX Chequeando HPA hpa.Spec.ScaleTargetRef.Kind: %s", hpa.Spec.ScaleTargetRef.Kind)
+		return hpa.Spec.ScaleTargetRef.Kind == "SonataFlow"
+	}
+	return false
+}
+
+// mapHPAToSonataFlowRequests given a HorizontalPodAutoscaler that targets a SonataFlow, returns the recon request to
+// that workflow.
+func (r *SonataFlowReconciler) mapHPAToSonataFlowRequests(ctx context.Context, object client.Object) []reconcile.Request {
+	hpa := object.(*autoscalingv2.HorizontalPodAutoscaler)
+	// TODO WM
+	klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX Creando request %s/%s", hpa.Namespace, hpa.Spec.ScaleTargetRef.Name)
+	return []reconcile.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Namespace: hpa.Namespace,
+				Name:      hpa.Spec.ScaleTargetRef.Name,
+			},
+		},
+	}
 }
