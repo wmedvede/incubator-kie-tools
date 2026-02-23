@@ -53,6 +53,9 @@ func NewPodDisruptionBudgetHandler(support *common.StateSupport) PodDisruptionBu
 
 func (h podDisruptionBudgetHandler) Ensure(ctx context.Context, workflow *operatorapi.SonataFlow) (client.Object, error) {
 	createOrUpdate := false
+	if workflow.Spec.PodTemplate.DeploymentModel == operatorapi.KnativeDeploymentModel {
+		return nil, nil
+	}
 	if workflow.Spec.PodTemplate.PodDisruptionBudget != nil {
 		klog.V(log.D).Infof("Finding HPA for workflow: %s/%s", workflow.Namespace, workflow.Name)
 		hpa, err := kubernetes.FindHPAForWorkflow(ctx, h.stateSupport.C, workflow.Namespace, workflow.Name)
