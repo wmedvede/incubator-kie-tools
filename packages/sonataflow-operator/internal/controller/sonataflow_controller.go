@@ -22,8 +22,9 @@ package controller
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
+
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/utils/kubernetes"
 
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	pkgbuilder "sigs.k8s.io/controller-runtime/pkg/builder"
@@ -432,34 +433,29 @@ func (r *SonataFlowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // hpaToSonataFlowPredicate filters the HorizontalPodAutoscaler events that might require attention by the SonataFlow
 // controller, i.e., those HorizontalPodAutoscalers that points to a SonataFlow and has relevant changes rather than
-// status updates.
+// status updates. PodDisruptionBudgets managed by the controller might need attention.
 func hpaToSonataFlowPredicate() predicate.Funcs {
 	return predicate.Funcs{
 		CreateFunc: func(e ctrlevent.CreateEvent) bool {
 			printando(e.Object, "CreateEvent")
-			return hpaTargetsASonataFlow(e.Object)
+			return kubernetes.IsHPAndTargetsASonataFlowAsBool(e.Object)
 		},
 		UpdateFunc: func(e ctrlevent.UpdateEvent) bool {
 			printando(e.ObjectNew, "UpdateEvent")
-			// only care about changes in the HorizontalPodAutoscalers that points to a SonataFlow, and has changes
-			// in the Spec.
-			if hpaTargetsASonataFlow(e.ObjectOld) {
-				oldHpa := e.ObjectOld.(*autoscalingv2.HorizontalPodAutoscaler)
-				newHpa := e.ObjectNew.(*autoscalingv2.HorizontalPodAutoscaler)
-				result := !reflect.DeepEqual(oldHpa.Spec, newHpa.Spec)
-				//TODO WM
-				klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX HPA Point to workflow and Spec changed: %t", result)
-				return !reflect.DeepEqual(oldHpa.Spec, newHpa.Spec)
+			oldHpa, oldHpaOk := kubernetes.IsHPAndTargetsASonataFlow(e.ObjectOld)
+			newHpa, newHpaOK := kubernetes.IsHPAndTargetsASonataFlow(e.ObjectNew)
+			if oldHpaOk || newHpaOK {
+				return !kubernetes.HPAEqualsBySpec(oldHpa, newHpa)
 			}
 			return false
 		},
 		DeleteFunc: func(e ctrlevent.DeleteEvent) bool {
 			printando(e.Object, "DeleteEvent")
-			return hpaTargetsASonataFlow(e.Object)
+			return kubernetes.IsHPAndTargetsASonataFlowAsBool(e.Object)
 		},
 		GenericFunc: func(e ctrlevent.GenericEvent) bool {
 			printando(e.Object, "GenericEvent")
-			return hpaTargetsASonataFlow(e.Object)
+			return kubernetes.IsHPAndTargetsASonataFlowAsBool(e.Object)
 		},
 	}
 }
@@ -470,16 +466,6 @@ func printando(obj client.Object, event string) {
 		klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX Cuidao papa, el cast dio errores")
 	}
 	klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX Chequeando HPA para el evento: %s, - %s/%s -> %s\n", event, hpaRemove.Namespace, hpaRemove.Namespace, hpaRemove.Spec.ScaleTargetRef.Kind)
-}
-
-// hpaTargetsASonataFlow returns true if the Object obj is a HorizontalPodAutoscaler and targets a SonataFlow, false in
-// any other case.
-func hpaTargetsASonataFlow(obj client.Object) bool {
-	if hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler); ok {
-		klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX Chequeando HPA hpa.Spec.ScaleTargetRef.Kind: %s", hpa.Spec.ScaleTargetRef.Kind)
-		return hpa.Spec.ScaleTargetRef.Kind == "SonataFlow"
-	}
-	return false
 }
 
 // mapHPAToSonataFlowRequests given a HorizontalPodAutoscaler that targets a SonataFlow, returns the recon request to

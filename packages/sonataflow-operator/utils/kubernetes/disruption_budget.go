@@ -20,6 +20,10 @@ package kubernetes
 import (
 	"context"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	operatorapi "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08"
+
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog/v2"
@@ -28,16 +32,38 @@ import (
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/log"
 )
 
-// FindPDB returns the PodDisruptionBudget for the given namespace and name, or nil if it doesn't exist.
-func FindPDB(ctx context.Context, c client.Client, namespace string, name string) (*policyv1.PodDisruptionBudget, error) {
-	klog.V(log.D).Infof("Querying PodDisruptionBudget %s/%s.", namespace, name)
-	pdb := &policyv1.PodDisruptionBudget{}
-	err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, pdb)
+// IsEmptyPodDisruptionBudgetSpec returns true if the PodDisruptionBudgetSpec is nil of has no configured values at all,
+// false in any other case.
+func IsEmptyPodDisruptionBudgetSpec(spec *operatorapi.PodDisruptionBudgetSpec) bool {
+	return spec == nil || (spec.MinAvailable == nil && spec.MaxUnavailable == nil)
+}
+
+// ApplyPodDisruptionBudgetSpec applies an operatorapi.PodDisruptionBudgetSpec to the PodDisruptionBudget.
+func ApplyPodDisruptionBudgetSpec(pdb *policyv1.PodDisruptionBudget, spec *operatorapi.PodDisruptionBudgetSpec) {
+	if spec.MinAvailable != nil {
+		pdb.Spec.MinAvailable = spec.MinAvailable
+		pdb.Spec.MaxUnavailable = nil
+	} else {
+		pdb.Spec.MaxUnavailable = spec.MaxUnavailable
+		pdb.Spec.MinAvailable = nil
+	}
+}
+
+// SafeDeletePodDisruptionBudget deletes a potentially existing PodDisruptionBudget, ignoring the not existing error.
+func SafeDeletePodDisruptionBudget(ctx context.Context, c client.Client, namespace, name string) error {
+	err := c.Delete(ctx, &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return nil, nil
+			klog.V(log.D).Infof("PodDisruptionBudget %s/%s was already deleted or never existed.", namespace, name)
+			return nil
+		} else {
+			return err
 		}
-		return nil, err
 	}
-	return pdb, nil
+	return nil
 }

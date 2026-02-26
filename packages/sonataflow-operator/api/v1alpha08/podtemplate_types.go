@@ -541,7 +541,7 @@ type PodDisruptionBudgetSpec struct {
 	// An eviction is allowed if at least "minAvailable" pods selected by
 	// "selector" will still be available after the eviction, i.e. even in the
 	// absence of the evicted pod.  So for example you can prevent all voluntary
-	// evictions by specifying "100%".
+	// evictions by specifying "100%". This is a mutually exclusive setting with "maxUnavailable".
 	// +optional
 	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty" protobuf:"bytes,1,opt,name=minAvailable"`
 
@@ -553,9 +553,9 @@ type PodDisruptionBudgetSpec struct {
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty" protobuf:"bytes,3,opt,name=maxUnavailable"`
 }
 
-// PodTemplateSpec describes the desired custom Kubernetes PodTemplate definition for the deployed flow or service.
+// PodTemplateSpec describes the desired custom Kubernetes PodTemplate definition for a service.
 //
-// The ContainerSpec describes the container where the actual flow or service is running. It will override any default definitions.
+// The ContainerSpec describes the container where the service is running. It will override any default definitions.
 // For example, to override the image one can use `.spec.podTemplate.container.image = my/image:tag`.
 type PodTemplateSpec struct {
 	// Container is the Kubernetes container where the application should run.
@@ -566,4 +566,9 @@ type PodTemplateSpec struct {
 	PodSpec `json:",inline"`
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
+	// +optional
+	// Defines the Kubernetes PodDisruptionBudgetSpec for this service. When configured, the SonataPlatformFlow controller
+	// will automatically create a PodDisruptionBudget based on this specification that targets the service Deployment.
+	// Currently only apply for the Data Index.
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 }

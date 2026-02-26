@@ -21,6 +21,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
+
 	"k8s.io/klog/v2"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/log"
@@ -52,11 +54,12 @@ func NewPodDisruptionBudgetHandler(support *common.StateSupport) PodDisruptionBu
 }
 
 func (h podDisruptionBudgetHandler) Ensure(ctx context.Context, workflow *operatorapi.SonataFlow) (client.Object, error) {
-	createOrUpdate := false
 	if workflow.Spec.PodTemplate.DeploymentModel == operatorapi.KnativeDeploymentModel {
 		return nil, nil
 	}
-	if workflow.Spec.PodTemplate.PodDisruptionBudget != nil {
+
+	createOrUpdate := false
+	if !kubernetes.IsEmptyPodDisruptionBudgetSpec(workflow.Spec.PodTemplate.PodDisruptionBudget) {
 		klog.V(log.D).Infof("Finding HPA for workflow: %s/%s", workflow.Namespace, workflow.Name)
 		hpa, err := kubernetes.FindHPAForWorkflow(ctx, h.stateSupport.C, workflow.Namespace, workflow.Name)
 		if err != nil {
@@ -65,20 +68,20 @@ func (h podDisruptionBudgetHandler) Ensure(ctx context.Context, workflow *operat
 		if hpa != nil {
 			klog.V(log.D).Infof("HPA %s/%s was found for workflow %s/%s", hpa.Namespace, hpa.Name, workflow.Namespace, workflow.Name)
 			// The HPA determines the replicas. Be sure that the workflow can't be later downscaled to a number of replicas that blocks a drain.
-			createOrUpdate = hpa.Spec.MinReplicas != nil && *hpa.Spec.MinReplicas > int32(1)
+			// And, also that the user didn't voluntary scaled the workflow to 0.
+			createOrUpdate = kubernetes.HPAMinReplicasIsGreaterThan(hpa, int32(1)) && !workflowdef.IsScaledToZero(workflow)
 			klog.V(log.D).Infof("HPA %s/%s createOrUpdate: %t", hpa.Namespace, hpa.Name, createOrUpdate)
 		} else {
 			// The replicas are determined from the workflow spec. Be sure that the number of replicas don't block a drain.
-			createOrUpdate = workflow.Spec.PodTemplate.Replicas != nil && *workflow.Spec.PodTemplate.Replicas > int32(1)
+			createOrUpdate = workflowdef.ReplicasIsGreaterThan(workflow, int32(1))
 		}
 	}
 
 	if createOrUpdate {
 		pdb, _, err := h.podDisruptionBudget.Ensure(ctx, workflow, func(object client.Object) controllerutil.MutateFn {
 			return func() error {
-				currentPdb := object.(*policyv1.PodDisruptionBudget)
-				currentPdb.Spec.MinAvailable = workflow.Spec.PodTemplate.PodDisruptionBudget.MinAvailable
-				currentPdb.Spec.MaxUnavailable = workflow.Spec.PodTemplate.PodDisruptionBudget.MaxUnavailable
+				targetPdb := object.(*policyv1.PodDisruptionBudget)
+				kubernetes.ApplyPodDisruptionBudgetSpec(targetPdb, workflow.Spec.PodTemplate.PodDisruptionBudget)
 				return nil
 			}
 		})
@@ -88,15 +91,8 @@ func (h podDisruptionBudgetHandler) Ensure(ctx context.Context, workflow *operat
 		return pdb, nil
 	} else {
 		// Remove a potential previously created PDB if any.
-		pdb, err := kubernetes.FindPDB(ctx, h.stateSupport.C, workflow.Namespace, workflow.Name)
-		if err != nil {
-			return nil, fmt.Errorf("failed to find a potential PodDiscruptionBudget for workflow's deployment %s/%s: %v", workflow.Namespace, workflow.Name, err)
-		}
-		if pdb != nil {
-			err = h.stateSupport.C.Delete(ctx, pdb)
-			if err != nil {
-				return nil, fmt.Errorf("failed to delete PodDiscruptionBudget for workflow's deployment %s/%s: %v", workflow.Namespace, workflow.Name, err)
-			}
+		if err := kubernetes.SafeDeletePodDisruptionBudget(ctx, h.stateSupport.C, workflow.Namespace, workflow.Name); err != nil {
+			return nil, err
 		}
 		return nil, nil
 	}

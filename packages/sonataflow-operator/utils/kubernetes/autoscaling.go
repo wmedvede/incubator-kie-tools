@@ -21,6 +21,7 @@ package kubernetes
 
 import (
 	"context"
+	"reflect"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -35,7 +36,7 @@ import (
 // doesn't exist.
 // Note: By k8s definition, the HorizontalPodAutoscaler must belong to the same namespace as the managed deployment.
 func FindHPAForDeployment(ctx context.Context, c client.Client, namespace string, name string) (*autoscalingv2.HorizontalPodAutoscaler, error) {
-	return findHPAForTarget(ctx, c, namespace, "appls/v1", "Deployment", name)
+	return findHPAForTarget(ctx, c, namespace, "apps/v1", "Deployment", name)
 }
 
 // FindHPAForWorkflow returns the HorizontalPodAutoscaler targeting a workflow in a given namespace, or nil if it
@@ -81,4 +82,40 @@ func HPAIsActive(hpa *autoscalingv2.HorizontalPodAutoscaler) bool {
 // and let it manage the replicas.
 func HPAIsWorking(hpa *autoscalingv2.HorizontalPodAutoscaler) bool {
 	return HPAIsActive(hpa) || hpa.Status.DesiredReplicas > 0
+}
+
+// HPAEqualsBySpec returns true if to HorizontalPodAutoscaler has the same Spec, false in any other case.
+func HPAEqualsBySpec(hpa1, hpa2 *autoscalingv2.HorizontalPodAutoscaler) bool {
+	return reflect.DeepEqual(hpa1, hpa2)
+}
+
+// IsHPAndTargetsAKind returns (*autoscalingv2.HorizontalPodAutoscaler, true) if the object is a HorizontalPodAutoscaler
+// and targets a given kind, (nil, false) in other cases.
+func IsHPAndTargetsAKind(obj client.Object, kind string) (*autoscalingv2.HorizontalPodAutoscaler, bool) {
+	if hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler); ok {
+		klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX IsHPAndTargetsAKind HPA hpa.Spec.ScaleTargetRef.Kind: %s", hpa.Spec.ScaleTargetRef.Kind)
+		if hpa != nil && hpa.Spec.ScaleTargetRef.Kind == kind {
+			return hpa, true
+		}
+	}
+	return nil, false
+}
+
+func IsHPAndTargetsADeployment(obj client.Object) (*autoscalingv2.HorizontalPodAutoscaler, bool) {
+	return IsHPAndTargetsAKind(obj, "Deployment")
+}
+
+func IsHPAndTargetsASonataFlow(obj client.Object) (*autoscalingv2.HorizontalPodAutoscaler, bool) {
+	return IsHPAndTargetsAKind(obj, "SonataFlow")
+}
+
+func IsHPAndTargetsASonataFlowAsBool(obj client.Object) bool {
+	_, ok := IsHPAndTargetsAKind(obj, "SonataFlow")
+	return ok
+}
+
+// HPAMinReplicasIsGreaterThan returns true if the HorizontalPodAutoscaler configured minReplicas is != nil, and greater
+// than the given value. False in any other case.
+func HPAMinReplicasIsGreaterThan(hpa *autoscalingv2.HorizontalPodAutoscaler, value int32) bool {
+	return hpa.Spec.MinReplicas != nil && *hpa.Spec.MinReplicas > value
 }
