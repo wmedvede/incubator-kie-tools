@@ -535,7 +535,7 @@ func (f *PodSpec) ToPodSpec() corev1.PodSpec {
 	}
 }
 
-// PodDisruptionBudgetSpec describes the Kubernetes pod disruption configuration for the SonataFlow and supporting
+// PodDisruptionBudgetSpec describes the Kubernetes pod disruption budget configuration for the SonataFlow and supporting
 // services pods.
 type PodDisruptionBudgetSpec struct {
 	// An eviction is allowed if at least "minAvailable" pods selected by
@@ -566,9 +566,9 @@ type PodTemplateSpec struct {
 	PodSpec `json:",inline"`
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
-	// +optional
-	// Defines the Kubernetes PodDisruptionBudgetSpec for this service. When configured, the SonataPlatformFlow controller
+	// Defines the Kubernetes PodDisruptionBudgetSpec for this service. When configured, the SonataFlowPlatform controller
 	// will automatically create a PodDisruptionBudget based on this specification that targets the service Deployment.
 	// Currently only apply for the Data Index.
+	// +optional
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 }

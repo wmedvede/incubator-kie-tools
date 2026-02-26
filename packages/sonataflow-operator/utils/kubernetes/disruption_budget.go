@@ -32,7 +32,7 @@ import (
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/log"
 )
 
-// IsEmptyPodDisruptionBudgetSpec returns true if the PodDisruptionBudgetSpec is nil of has no configured values at all,
+// IsEmptyPodDisruptionBudgetSpec returns true if the PodDisruptionBudgetSpec is nil or has no configured values at all,
 // false in any other case.
 func IsEmptyPodDisruptionBudgetSpec(spec *operatorapi.PodDisruptionBudgetSpec) bool {
 	return spec == nil || (spec.MinAvailable == nil && spec.MaxUnavailable == nil)

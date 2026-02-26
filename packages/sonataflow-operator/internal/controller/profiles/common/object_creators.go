@@ -478,12 +478,11 @@ func PodDisruptionBudgetCreator(workflow *operatorapi.SonataFlow) (client.Object
 			Labels:    lbl,
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
-			MinAvailable: workflow.Spec.PodTemplate.PodDisruptionBudget.MinAvailable,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: workflowproj.GetSelectorLabels(workflow),
 			},
-			MaxUnavailable: workflow.Spec.PodTemplate.PodDisruptionBudget.MaxUnavailable,
 		},
 	}
+	kubeutil.ApplyPodDisruptionBudgetSpec(podDisruptionBudget, workflow.Spec.PodTemplate.PodDisruptionBudget)
 	return podDisruptionBudget, nil
 }

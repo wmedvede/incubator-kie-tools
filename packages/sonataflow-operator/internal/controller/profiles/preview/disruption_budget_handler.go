@@ -20,6 +20,8 @@ package preview
 import (
 	"context"
 	"fmt"
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/workflowproj"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/controller/workflowdef"
 
@@ -70,7 +72,6 @@ func (h podDisruptionBudgetHandler) Ensure(ctx context.Context, workflow *operat
 			// The HPA determines the replicas. Be sure that the workflow can't be later downscaled to a number of replicas that blocks a drain.
 			// And, also that the user didn't voluntary scaled the workflow to 0.
 			createOrUpdate = kubernetes.HPAMinReplicasIsGreaterThan(hpa, int32(1)) && !workflowdef.IsScaledToZero(workflow)
-			klog.V(log.D).Infof("HPA %s/%s createOrUpdate: %t", hpa.Namespace, hpa.Name, createOrUpdate)
 		} else {
 			// The replicas are determined from the workflow spec. Be sure that the number of replicas don't block a drain.
 			createOrUpdate = workflowdef.ReplicasIsGreaterThan(workflow, int32(1))
@@ -81,6 +82,9 @@ func (h podDisruptionBudgetHandler) Ensure(ctx context.Context, workflow *operat
 		pdb, _, err := h.podDisruptionBudget.Ensure(ctx, workflow, func(object client.Object) controllerutil.MutateFn {
 			return func() error {
 				targetPdb := object.(*policyv1.PodDisruptionBudget)
+				targetPdb.Spec.Selector = &metav1.LabelSelector{
+					MatchLabels: workflowproj.GetSelectorLabels(workflow),
+				}
 				kubernetes.ApplyPodDisruptionBudgetSpec(targetPdb, workflow.Spec.PodTemplate.PodDisruptionBudget)
 				return nil
 			}

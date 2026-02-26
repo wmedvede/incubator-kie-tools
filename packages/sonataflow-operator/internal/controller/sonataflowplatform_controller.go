@@ -396,11 +396,9 @@ func (r *SonataFlowPlatformReconciler) mapHPAToPlatformRequests(ctx context.Cont
 func hpaToSonataFlowPlatformServicePredicate() predicate.Funcs {
 	return predicate.Funcs{
 		CreateFunc: func(e ctrlevent.CreateEvent) bool {
-			printando(e.Object, "CreateEvent")
 			return isHPAndCandidateToTargetADataIndexDeploymentAsBool(e.Object)
 		},
 		UpdateFunc: func(e ctrlevent.UpdateEvent) bool {
-			printando(e.ObjectNew, "UpdateEvent")
 			oldHpa, oldHpaOk := isHPAndCandidateToTargetADataIndexDeployment(e.ObjectOld)
 			newHpa, newHpaOK := isHPAndCandidateToTargetADataIndexDeployment(e.ObjectNew)
 			if oldHpaOk || newHpaOK {
@@ -409,11 +407,9 @@ func hpaToSonataFlowPlatformServicePredicate() predicate.Funcs {
 			return false
 		},
 		DeleteFunc: func(e ctrlevent.DeleteEvent) bool {
-			printando(e.Object, "DeleteEvent")
 			return isHPAndCandidateToTargetADataIndexDeploymentAsBool(e.Object)
 		},
 		GenericFunc: func(e ctrlevent.GenericEvent) bool {
-			printando(e.Object, "GenericEvent")
 			return isHPAndCandidateToTargetADataIndexDeploymentAsBool(e.Object)
 		},
 	}

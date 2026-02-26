@@ -264,12 +264,10 @@ func createOrUpdatePDB(ctx context.Context, c client.Client, platform *operatora
 				// The HPA determines the replicas. Be sure that the service can't be later downscaled to a number of replicas that blocks a drain.
 				// And also, that the user didn't voluntary scaled the service to 0.
 				createOrUpdate = kubeutil.HPAMinReplicasIsGreaterThan(hpa, int32(1)) && !kubeutil.DeploymentIsScaledToZero(deployment)
-				klog.V(log.D).Infof("createOrUpdatePDB entramos al caso HPA, createOrUpdatePDB: %t.\n", createOrUpdate)
 			} else {
 				// The just reconciled deployment replicas were already configured properly, we can rely on this number.
 				// Be sure that the number of replicas don't block a drain.
 				createOrUpdate = kubeutil.DeploymentReplicasIsGreaterThan(deployment, int32(1))
-				klog.V(log.D).Infof("createOrUpdatePDB entramos al caso SIN HPA, createOrUpdatePDB: %t.\n", createOrUpdate)
 			}
 		}
 

@@ -93,7 +93,6 @@ func HPAEqualsBySpec(hpa1, hpa2 *autoscalingv2.HorizontalPodAutoscaler) bool {
 // and targets a given kind, (nil, false) in other cases.
 func IsHPAndTargetsAKind(obj client.Object, kind string) (*autoscalingv2.HorizontalPodAutoscaler, bool) {
 	if hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler); ok {
-		klog.V(log.D).Infof("XXXXXXXXXXXXXXXXXXX IsHPAndTargetsAKind HPA hpa.Spec.ScaleTargetRef.Kind: %s", hpa.Spec.ScaleTargetRef.Kind)
 		if hpa != nil && hpa.Spec.ScaleTargetRef.Kind == kind {
 			return hpa, true
 		}
@@ -101,14 +100,20 @@ func IsHPAndTargetsAKind(obj client.Object, kind string) (*autoscalingv2.Horizon
 	return nil, false
 }
 
+// IsHPAndTargetsADeployment returns (*autoscalingv2.HorizontalPodAutoscaler, true) if the object is a HorizontalPodAutoscaler
+// and targets a Deployment, (nil, false) in other cases.
 func IsHPAndTargetsADeployment(obj client.Object) (*autoscalingv2.HorizontalPodAutoscaler, bool) {
 	return IsHPAndTargetsAKind(obj, "Deployment")
 }
 
+// IsHPAndTargetsASonataFlow returns (*autoscalingv2.HorizontalPodAutoscaler, true) if the object is a HorizontalPodAutoscaler
+// and targets a SonataFlow, (nil, false) in other cases.
 func IsHPAndTargetsASonataFlow(obj client.Object) (*autoscalingv2.HorizontalPodAutoscaler, bool) {
 	return IsHPAndTargetsAKind(obj, "SonataFlow")
 }
 
+// IsHPAndTargetsASonataFlowAsBool returns true if the object is a HorizontalPodAutoscaler and targets a SonataFlow,
+// false in other cases.
 func IsHPAndTargetsASonataFlowAsBool(obj client.Object) bool {
 	_, ok := IsHPAndTargetsAKind(obj, "SonataFlow")
 	return ok
