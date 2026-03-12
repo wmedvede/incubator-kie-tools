@@ -78,6 +78,7 @@ func init() {
 }
 
 func main() {
+	fmt.Printf("Starting sonataflow-controller 11-03-2026\n")
 	var metricsAddr string
 	var enableLeaderElection bool
 	var leaseDuration *time.Duration
