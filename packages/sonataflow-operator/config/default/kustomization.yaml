@@ -68,6 +68,13 @@ resources:
   - ../crd
   - ../rbac
   - ../manager
+  - ../webhook
+#   Non OpenShift installations, or OpenShift installations that wants to manually configure the cert-manager
+#   - ../certmanager
 patches:
   - path: manager_auth_proxy_patch.yaml
   - path: controllers_config_patch.yaml
+  - path: manager_webhook_patch.yaml
+  - path: webhook_openshift_patch.yaml
+#     Non OpenShift installations, or OpenShift installations that wants to manually configure the cert-manager
+#   - path: webhookcainjection_patch.yaml
