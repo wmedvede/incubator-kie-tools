@@ -26,6 +26,8 @@ import (
 	"os"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/version"
 
 	"k8s.io/client-go/dynamic"
@@ -145,6 +147,9 @@ func main() {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
 
+	webhookServer := webhook.NewServer(webhook.Options{
+		TLSOpts: tlsOpts,
+	})
 	config := ctrl.GetConfigOrDie()
 	config.QPS = float32(*qps)
 	config.Burst = *burst
@@ -155,6 +160,7 @@ func main() {
 			SecureServing: secureMetrics,
 			TLSOpts:       tlsOpts,
 		},
+		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "1be5e57d.kie.org",
@@ -206,6 +212,12 @@ func main() {
 		klog.V(log.E).ErrorS(err, "unable to create controller", "controller", "SonataFlow")
 		os.Exit(1)
 	}
+
+	if err = operatorapi.SetupSonataFlowWithManager(mgr); err != nil {
+		klog.V(log.E).ErrorS(err, "unable to create webhook", "webhook", "SonataFlow")
+		os.Exit(1)
+	}
+
 	if err = (&controller.SonataFlowBuildReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
