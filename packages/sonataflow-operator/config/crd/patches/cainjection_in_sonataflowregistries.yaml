@@ -15,11 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
-## Append samples you want in your CSV to this file as resources ##
-resources:
-  - sonataflow.org_v1alpha08_sonataflow.yaml
-  - sonataflow.org_v1alpha08_sonataflowplatform.yaml
-  - sonataflow.org_v1alpha08_sonataflowbuild.yaml
-  - sonataflow.org_v1alpha08_sonataflowclusterplatform.yaml
-  - sonataflow_v1alpha08_sonataflowregistry.yaml
-#+kubebuilder:scaffold:manifestskustomizesamples
+# The following patch adds a directive for certmanager to inject CA into the CRD
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: CERTIFICATE_NAMESPACE/CERTIFICATE_NAME
+  name: sonataflowregistries.sonataflow.org

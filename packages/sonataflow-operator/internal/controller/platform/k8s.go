@@ -22,6 +22,9 @@ package platform
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/internal/manager"
 
 	v2 "k8s.io/api/autoscaling/v2"
 	policyv1 "k8s.io/api/policy/v1"
@@ -93,6 +96,8 @@ func (action *serviceAction) Handle(ctx context.Context, platform *operatorapi.S
 			return nil, event, err
 		}
 	}
+
+	createOrDeletePlatformRegistryWorker(action.client, platform, psDI.IsServiceEnabledInSpec())
 
 	if psJS.IsServiceSetInSpec() {
 		if event, err := createOrUpdateServiceComponents(ctx, action.client, platform, psJS); err != nil {
@@ -337,6 +342,217 @@ func createOrUpdateService(ctx context.Context, client client.Client, platform *
 		klog.V(log.I).InfoS("Service successfully reconciled", "operation", op)
 	}
 
+	return nil
+}
+
+func createOrUpdatePlatformRegistry(ctx context.Context, c client.Client, platform *operatorapi.SonataFlowPlatform) {
+	registry := manager.GetSFPControllerWorkerRegistry()
+	workerName := fmt.Sprintf("%s-%s", platform.Namespace, platform.Name)
+	if !registry.Exists(workerName) {
+		worker := manager.NewPeriodicWorker(func(ctx context.Context) {
+			fmt.Printf("XXXX executing worker! %s\n", workerName)
+			return
+		}, 2, time.Duration(5*time.Second))
+		registry.Register(workerName, worker)
+		worker.Start(registry.GetRootContext())
+	}
+}
+
+func workerName(namespace string) string {
+	return fmt.Sprintf("%s-worker", namespace)
+}
+
+func workflowVersionsConfigMapName(namespace string) string {
+	return "sonataflow-platform-registry"
+}
+
+func createOrDeletePlatformRegistryWorker(c client.Client, platform *operatorapi.SonataFlowPlatform, create bool) {
+	klog.V(log.D).Infof("createOrDeletePlatformRegistryWorker for : %s/%s, create: %t", platform.Namespace, platform.Name, create)
+	registry := manager.GetSFPControllerWorkerRegistry()
+	platformWorkerName := workerName(platform.Namespace)
+	if !create {
+		klog.V(log.D).Infof("Try to Deregister worker: %s.", platformWorkerName)
+		worker := registry.GetIfExists(platformWorkerName)
+		if worker != nil {
+			klog.V(log.D).Infof("Deregister existing worker: %s.", platformWorkerName)
+			registry.Deregister(platformWorkerName)
+			worker.Stop()
+		} else {
+			klog.V(log.D).Infof("Worker: %s is not registered, it could have been Deregistered in a former recon cycle.", platformWorkerName)
+		}
+	} else {
+		klog.V(log.D).Infof("Try to Register worker: %s.", platformWorkerName)
+		worker := registry.GetIfExists(platformWorkerName)
+		if worker != nil {
+			klog.V(log.D).Infof("Worker: %s was already registered.", platformWorkerName)
+		} else {
+			klog.V(log.D).Infof("Worker: %s is not registered, it must be registered now.", platformWorkerName)
+			worker = manager.NewPeriodicWorker(refreshRegistry(c, platform.Namespace, platform.Name), 2, time.Duration(5*time.Second))
+			registry.Register(platformWorkerName, worker)
+			worker.Start(registry.GetRootContext())
+		}
+	}
+}
+
+func GetDataIndexGraphqlURL(cli client.Client, namespace string) (string, error) {
+	var err error
+	var sfp *operatorapi.SonataFlowPlatform
+	var uri string
+
+	if sfp, err = GetActivePlatform(context.Background(), cli, namespace, false); err != nil {
+		return "", fmt.Errorf("failed to get active platform for namespace: %s, %v", namespace, err)
+	}
+	if sfp == nil {
+		klog.V(log.D).Infof("No active platform was found to query the workflow definitions for namespace: %s.", namespace)
+		return "", err
+	}
+	diHandler := services.NewDataIndexHandler(sfp)
+	if !diHandler.IsServiceEnabledInSpec() {
+		klog.V(log.D).Infof("DataIndex is not enabled for namespace: %s.", namespace)
+		return "", nil
+	}
+	uri = diHandler.GetServiceBaseUrl() + "/graphql"
+	return uri, nil
+}
+
+func refreshRegistry(cli client.Client, namespace, name string) manager.ContextAwareRunnable {
+	return func(ctx context.Context) {
+		wName := workerName(namespace)
+		klog.V(log.D).Infof("worker: %s is executing the periodic registry refresh for namespace: %s.", wName, namespace)
+		graphqlURL, err := GetDataIndexGraphqlURL(cli, namespace)
+		if err != nil {
+			klog.V(log.W).Infof("worker: %s failed to get Data Index graphqlURL for namespace: %s. A new retry will be executed in the next period, %v", wName, namespace, err)
+			return
+		}
+		klog.V(log.D).Infof("worker: %s successfully obtained the Data Index graphqlURL for namespace: %s -> %s.", wName, namespace, graphqlURL)
+
+		query := GraphQLQuery{Query: "{ ProcessDefinitions { id, version } }"}
+		response, err := ExecuteDataIndexQuery(ctx, graphqlURL, query)
+		if err != nil {
+			klog.V(log.W).Infof("worker: %s failed to execute workflow definitions Data Index query for namespace: %s, a new attempt will be executed in the next period: %v.", wName, namespace, err)
+			return
+		}
+		data := response.Data
+		if data == nil {
+			klog.V(log.W).Infof("worker: %s workflow definitions Data Index query returned no data field.", wName)
+			return
+		}
+
+		rawDefs, ok := data["ProcessDefinitions"]
+		if !ok || rawDefs == nil {
+			klog.V(log.W).Infof("worker: %s, no workflow definitions are registered in the Data Index namespace: %s.", wName, namespace)
+			return
+		}
+
+		defs, ok := rawDefs.([]interface{})
+		if !ok {
+			klog.V(log.W).Infof("worker: %s, workflow definitions query returned no 'ProcessDefinitions' field, or its not an array, for namespace: %s.", wName, namespace)
+			return
+		}
+
+		workflows := make(Workflows)
+		for _, item := range defs {
+			obj, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			wfId, _ := obj["id"].(string)
+			wfVersion, _ := obj["version"].(string)
+
+			klog.V(log.D).Infof("worker: %s, workflow definition was found: (%s, %s) in the Data Index query result.", wName, wfId, wfVersion)
+
+			currentWfVersions := workflows[wfId]
+			currentWfVersions = append(currentWfVersions, Version{
+				Version: wfVersion,
+				Enabled: nil,
+			})
+			workflows[wfId] = currentWfVersions
+		}
+		klog.V(log.D).Infof("worker: %s, workflow definitions query returned %d workflow ids", wName, len(workflows))
+		err = createOrUpdateWorkflowVersionsConfigMap(ctx, cli, workflowVersionsConfigMapName(namespace), namespace, workflows)
+		if err != nil {
+			klog.V(log.W).Infof("worker: %s failed to execute createOrUpdateWorkflowVersionsConfigMap for namespace: %s, a new attempt will be executed in the next period: %v.", wName, namespace, err)
+		}
+	}
+}
+
+func createOrUpdateWorkflowVersionsConfigMap(ctx context.Context, cli client.Client, name string, namespace string, workflows Workflows) error {
+	var skip SkipConfig
+
+	klog.V(log.D).Infof("We must marshal %d workflows", len(workflows))
+
+	wfYAML, err := MarshalWorkflows(workflows)
+	if err != nil {
+		return fmt.Errorf("failed to marshal workflow versions information: %v", err)
+	}
+
+	skipYAML, err := MarshalSkipConfig(skip)
+	if err != nil {
+		return fmt.Errorf("failed to marshal the workflow that skips the version validation: %v", err)
+	}
+
+	wfYAMLMarshalled := string(wfYAML)
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			//Labels:    GetMergedLabels(workflow),
+		},
+		Data: map[string]string{
+			WorkflowsField: wfYAMLMarshalled,
+			// TODO remove, we dont set the user provided config.
+			SkipField: string(skipYAML),
+		},
+	}
+
+	if op, err := controllerutil.CreateOrUpdate(ctx, cli, configMap, func() error {
+		// always write the versions, and let the potential user entered skip.yaml untouched
+		if configMap.Data == nil {
+			configMap.Data = map[string]string{}
+		}
+		configMap.Data[WorkflowsField] = wfYAMLMarshalled
+		return nil
+	}); err != nil {
+		return err
+	} else {
+		klog.V(log.I).Infof("SonataPlatformRegistry ConfigMap %s/%s successfully reconciled, op: %s.", configMap.Namespace, configMap.Name, op)
+	}
+	return nil
+}
+
+func createOrUpdateRegistry(ctx context.Context, c client.Client, platform *operatorapi.SonataFlowPlatform) error {
+	name := platform.Name
+	lbl := map[string]string{
+		workflowproj.LabelApp:             platform.Name,
+		workflowproj.LabelAppNamespace:    platform.Namespace,
+		metadata.KubernetesLabelInstance:  platform.Name,
+		metadata.KubernetesLabelName:      name,
+		metadata.KubernetesLabelComponent: "registry",
+		metadata.KubernetesLabelPartOf:    platform.Name,
+		metadata.KubernetesLabelManagedBy: "sonataflow-operator",
+		metadata.KubernetesLabelVersion:   version.GetImageTagVersion(),
+	}
+
+	registry := &operatorapi.SonataFlowRegistry{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: platform.Namespace,
+			Labels:    lbl,
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(platform, registry, c.Scheme()); err != nil {
+		return err
+	}
+
+	if op, err := controllerutil.CreateOrUpdate(ctx, c, registry, func() error {
+		return nil
+	}); err != nil {
+		return err
+	} else {
+		klog.V(log.I).Infof("SonataFlowRegistry %s/%s successfully reconciled, op: %s.", registry.Namespace, registry.Name, op)
+	}
 	return nil
 }
 

@@ -15,11 +15,30 @@
 # specific language governing permissions and limitations
 # under the License.
 
-## Append samples you want in your CSV to this file as resources ##
-resources:
-  - sonataflow.org_v1alpha08_sonataflow.yaml
-  - sonataflow.org_v1alpha08_sonataflowplatform.yaml
-  - sonataflow.org_v1alpha08_sonataflowbuild.yaml
-  - sonataflow.org_v1alpha08_sonataflowclusterplatform.yaml
-  - sonataflow_v1alpha08_sonataflowregistry.yaml
-#+kubebuilder:scaffold:manifestskustomizesamples
+# permissions for end users to view sonataflowregistries.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: sonataflowregistry-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: sonataflow-operator
+    app.kubernetes.io/part-of: sonataflow-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: sonataflowregistry-viewer-role
+rules:
+  - apiGroups:
+      - sonataflow.org
+    resources:
+      - sonataflowregistries
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - sonataflow.org
+    resources:
+      - sonataflowregistries/status
+    verbs:
+      - get

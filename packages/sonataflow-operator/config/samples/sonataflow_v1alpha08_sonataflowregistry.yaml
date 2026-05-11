@@ -15,11 +15,15 @@
 # specific language governing permissions and limitations
 # under the License.
 
-## Append samples you want in your CSV to this file as resources ##
-resources:
-  - sonataflow.org_v1alpha08_sonataflow.yaml
-  - sonataflow.org_v1alpha08_sonataflowplatform.yaml
-  - sonataflow.org_v1alpha08_sonataflowbuild.yaml
-  - sonataflow.org_v1alpha08_sonataflowclusterplatform.yaml
-  - sonataflow_v1alpha08_sonataflowregistry.yaml
-#+kubebuilder:scaffold:manifestskustomizesamples
+apiVersion: sonataflow.org/v1alpha08
+kind: SonataFlowRegistry
+metadata:
+  labels:
+    app.kubernetes.io/name: sonataflowregistry
+    app.kubernetes.io/instance: sonataflowregistry-sample
+    app.kubernetes.io/part-of: sonataflow-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: sonataflow-operator
+  name: sonataflowregistry-sample
+spec:
+  # TODO(user): Add fields here

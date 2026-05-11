@@ -78,6 +78,7 @@ rules:
       - sonataflowbuilds
       - sonataflowclusterplatforms
       - sonataflowplatforms
+      - sonataflowregistries
       - sonataflows
     verbs:
       - create
@@ -93,6 +94,7 @@ rules:
       - sonataflowbuilds/finalizers
       - sonataflowclusterplatforms/finalizers
       - sonataflowplatforms/finalizers
+      - sonataflowregistries/finalizers
       - sonataflows/finalizers
     verbs:
       - update
@@ -102,6 +104,7 @@ rules:
       - sonataflowbuilds/status
       - sonataflowclusterplatforms/status
       - sonataflowplatforms/status
+      - sonataflowregistries/status
       - sonataflows/scale
       - sonataflows/status
     verbs:

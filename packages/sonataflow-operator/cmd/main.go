@@ -61,6 +61,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
 	operatorapi "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08"
+	sonataflowv1alpha08 "github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08"
 	"github.com/apache/incubator-kie-tools/packages/sonataflow-operator/log"
 	//+kubebuilder:scaffold:imports
 )
@@ -76,6 +77,7 @@ func init() {
 	utilruntime.Must(eventingv1.AddToScheme(scheme))
 	utilruntime.Must(servingv1.AddToScheme(scheme))
 	utilruntime.Must(prometheus.AddToScheme(scheme))
+	utilruntime.Must(sonataflowv1alpha08.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -126,6 +128,9 @@ func main() {
 	klog.InfoS("client-go throttling configuration",
 		"qps", qps,
 		"burst", burst)
+
+	// get the root context registering the SIGTERM and SIGINT signals
+	rootCtx := ctrl.SetupSignalHandler()
 
 	manager.SetOperatorStartTime()
 
@@ -203,6 +208,8 @@ func main() {
 	// Initialize the worker used by the SonataFlow reconciliations to execute auxiliary async operations.
 	manager.InitializeSFCWorker(manager.SonataFlowControllerWorkerSize)
 
+	manager.InitializeSFPControllerWorkerRegistry(rootCtx)
+
 	if err = (&controller.SonataFlowReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
@@ -213,8 +220,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = operatorapi.SetupSonataFlowWithManager(mgr); err != nil {
-		klog.V(log.E).ErrorS(err, "unable to create webhook", "webhook", "SonataFlow")
+	if err = operatorapi.SetupSonataFlowWebHookWithManager(mgr); err != nil {
+		klog.V(log.E).ErrorS(err, "unable to create webhook", "webhook", "SonataFlowWebHook")
 		os.Exit(1)
 	}
 
@@ -248,6 +255,13 @@ func main() {
 		klog.V(log.E).ErrorS(err, "unable to create controller", "controller", "SonataFlowClusterPlatform")
 		os.Exit(1)
 	}
+	if err = (&controller.SonataFlowRegistryReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		klog.V(log.E).ErrorS(err, "unable to create controller", "controller", "SonataFlowRegistry")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if utils.IsOpenShift() {
@@ -264,7 +278,7 @@ func main() {
 	}
 
 	klog.V(log.I).InfoS("starting manager", "version:", version.GetOperatorVersion())
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(rootCtx); err != nil {
 		klog.V(log.E).ErrorS(err, "problem running manager")
 		os.Exit(1)
 	}

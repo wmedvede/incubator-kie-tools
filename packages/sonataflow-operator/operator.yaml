@@ -17529,6 +17529,97 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.16.4
   labels:
     app.kubernetes.io/name: sonataflow-operator
+  name: sonataflowregistries.sonataflow.org
+spec:
+  group: sonataflow.org
+  names:
+    kind: SonataFlowRegistry
+    listKind: SonataFlowRegistryList
+    plural: sonataflowregistries
+    singular: sonataflowregistry
+  scope: Namespaced
+  versions:
+    - name: v1alpha08
+      schema:
+        openAPIV3Schema:
+          description: SonataFlowRegistry is the Schema for the sonataflowregistries
+            API
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: SonataFlowRegistrySpec defines the desired state of SonataFlowRegistry
+              properties:
+                workflowVersions:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+            status:
+              description: SonataFlowRegistryStatus defines the observed state of SonataFlowRegistry
+              properties:
+                conditions:
+                  description: The latest available observations of a resource's current
+                    state.
+                  items:
+                    description: Condition describes the common structure for conditions
+                      in our types
+                    properties:
+                      lastUpdateTime:
+                        description: The last time this condition was updated.
+                        format: date-time
+                        type: string
+                      message:
+                        description: A human-readable message indicating details about
+                          the transition.
+                        type: string
+                      reason:
+                        description: The reason for the condition's last transition.
+                        type: string
+                      status:
+                        description: Status of the condition, one of True, False, Unknown.
+                        type: string
+                      type:
+                        description: Type condition for the given object
+                        type: string
+                    required:
+                      - status
+                      - type
+                    type: object
+                  type: array
+                observedGeneration:
+                  description: The generation observed by the deployment controller.
+                  format: int64
+                  type: integer
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+  labels:
+    app.kubernetes.io/name: sonataflow-operator
   name: sonataflows.sonataflow.org
 spec:
   group: sonataflow.org
@@ -27940,6 +28031,7 @@ rules:
       - sonataflowbuilds
       - sonataflowclusterplatforms
       - sonataflowplatforms
+      - sonataflowregistries
       - sonataflows
     verbs:
       - create
@@ -27955,6 +28047,7 @@ rules:
       - sonataflowbuilds/finalizers
       - sonataflowclusterplatforms/finalizers
       - sonataflowplatforms/finalizers
+      - sonataflowregistries/finalizers
       - sonataflows/finalizers
     verbs:
       - update
@@ -27964,6 +28057,7 @@ rules:
       - sonataflowbuilds/status
       - sonataflowclusterplatforms/status
       - sonataflowplatforms/status
+      - sonataflowregistries/status
       - sonataflows/scale
       - sonataflows/status
     verbs:
@@ -28407,6 +28501,29 @@ spec:
   selector:
     app.kubernetes.io/name: sonataflow-operator
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: webhook-server-cert
+  labels:
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/created-by: sonataflow-operator
+    app.kubernetes.io/instance: webhook-service
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: sonataflow-operator
+    app.kubernetes.io/part-of: sonataflow-operator
+  name: sonataflow-operator-webhook-service
+  namespace: sonataflow-operator-system
+spec:
+  ports:
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: webhook-server
+  selector:
+    app.kubernetes.io/name: sonataflow-operator
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28466,6 +28583,10 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 20
           name: manager
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
           readinessProbe:
             httpGet:
               path: /readyz
@@ -28485,6 +28606,9 @@ spec:
               drop:
                 - ALL
           volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
             - mountPath: /config/controllers_cfg.yaml
               name: controllers-config
               subPath: controllers_cfg.yaml
@@ -28521,6 +28645,40 @@ spec:
       serviceAccountName: sonataflow-operator-controller-manager
       terminationGracePeriodSeconds: 10
       volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: webhook-server-cert
         - configMap:
             name: sonataflow-operator-controllers-config
           name: controllers-config
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+  labels:
+    app.kubernetes.io/name: sonataflow-operator
+  name: sonataflow-operator-validating-webhook-configuration
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: sonataflow-operator-webhook-service
+        namespace: sonataflow-operator-system
+        path: /validate-sonataflow-org-v1alpha08-sonataflow
+    failurePolicy: Fail
+    name: vsonataflow.kb.io
+    rules:
+      - apiGroups:
+          - sonataflow.org
+        apiVersions:
+          - v1alpha08
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - sonataflows
+    sideEffects: None

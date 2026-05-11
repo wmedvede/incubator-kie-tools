@@ -49,4 +49,13 @@ resources:
   kind: SonataFlowClusterPlatform
   path: github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08
   version: v1alpha08
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: org
+  group: sonataflow
+  kind: SonataFlowRegistry
+  path: github.com/apache/incubator-kie-tools/packages/sonataflow-operator/api/v1alpha08
+  version: v1alpha08
 version: "3"

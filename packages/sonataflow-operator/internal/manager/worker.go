@@ -18,6 +18,8 @@
 package manager
 
 import (
+	"context"
+	"sync"
 	"time"
 )
 
@@ -74,4 +76,125 @@ func (w Worker) Start() {
 
 func (w Worker) RunAsync(r Runnable) {
 	w.ch <- r
+}
+
+var sonataFlowPlatformControllerWorkerRegistry *PeriodicWorkerRegistry
+
+func InitializeSFPControllerWorkerRegistry(rootCtx context.Context) {
+	sonataFlowPlatformControllerWorkerRegistry = &PeriodicWorkerRegistry{
+		rootCtx: rootCtx,
+		workers: make(map[string]*PeriodicWorker),
+	}
+}
+
+func GetSFPControllerWorkerRegistry() *PeriodicWorkerRegistry {
+	return sonataFlowPlatformControllerWorkerRegistry
+}
+
+type PeriodicWorkerRegistry struct {
+	rootCtx context.Context
+	workers map[string]*PeriodicWorker
+	mu      sync.RWMutex
+}
+
+func (m *PeriodicWorkerRegistry) GetRootContext() context.Context {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.rootCtx
+}
+
+func (m *PeriodicWorkerRegistry) Exists(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, exists := m.workers[name]
+	return exists
+}
+
+func (m *PeriodicWorkerRegistry) GetIfExists(name string) *PeriodicWorker {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	worker, exists := m.workers[name]
+	if exists {
+		return worker
+	}
+	return nil
+}
+
+func (m *PeriodicWorkerRegistry) Register(name string, worker *PeriodicWorker) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.workers[name] = worker
+}
+
+func (m *PeriodicWorkerRegistry) Deregister(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.workers, name)
+}
+
+type ContextAwareRunnable func(ctx context.Context)
+
+type PeriodicWorker struct {
+	mu              sync.Mutex
+	periodInSeconds int
+	running         bool
+	work            ContextAwareRunnable
+	execTimeout     time.Duration
+	cancel          context.CancelFunc
+	ctx             context.Context
+}
+
+func NewPeriodicWorker(r ContextAwareRunnable, periodInSeconds int, execTimeout time.Duration) *PeriodicWorker {
+	return &PeriodicWorker{
+		work:            r,
+		periodInSeconds: periodInSeconds,
+		execTimeout:     execTimeout,
+	}
+}
+
+func (w *PeriodicWorker) Start(parentCtx context.Context) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.running {
+		return
+	}
+	w.ctx, w.cancel = context.WithCancel(parentCtx)
+	w.running = true
+	go w.run()
+}
+
+// run used by Start, never call it directly.
+func (w *PeriodicWorker) run() {
+	ticker := time.NewTicker(time.Duration(w.periodInSeconds) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		case <-ticker.C:
+			w.executeOnce()
+		}
+	}
+}
+
+// executeOnce used by run, never call it directly.
+func (w *PeriodicWorker) executeOnce() {
+	// execution warded by the respective worker execTimeout
+	execCtx, cancel := context.WithTimeout(w.ctx, w.execTimeout)
+	defer cancel()
+	w.work(execCtx)
+}
+
+func (w *PeriodicWorker) Stop() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if !w.running {
+		return
+	}
+	if w.cancel != nil {
+		w.cancel()
+	}
+	w.cancel = nil
+	w.running = false
 }

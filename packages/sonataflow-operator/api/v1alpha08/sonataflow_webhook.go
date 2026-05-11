@@ -35,26 +35,20 @@ import (
 
 const SonataFlowKind = "SonataFlow"
 
-func (r *SonataFlow) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
-		Complete()
-}
+var _ webhook.CustomValidator = &SonataFlowCustomValidator{}
 
-func SetupSonataFlowWithManager(mgr ctrl.Manager) error {
+type SonataFlowCustomValidator struct{}
+
+func SetupSonataFlowWebHookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).For(&SonataFlow{}).
 		WithValidator(&SonataFlowCustomValidator{}).
 		Complete()
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+// configure the "verbs=create;update;delete" to enable the validations.
 //+kubebuilder:webhook:path=/validate-sonataflow-org-v1alpha08-sonataflow,mutating=false,failurePolicy=fail,sideEffects=None,groups=sonataflow.org,resources=sonataflows,verbs=create;update,versions=v1alpha08,name=vsonataflow.kb.io,admissionReviewVersions=v1
 
-var _ webhook.CustomValidator = &SonataFlowCustomValidator{}
-
-type SonataFlowCustomValidator struct{}
-
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
+// ValidateCreate implements custom create-time validations for a SonataFlow.
 func (v *SonataFlowCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (warnings admission.Warnings, err error) {
 	fmt.Printf("SonataFlowCustomValidator.ValidateCreate\n")
 	req, err := admission.RequestFromContext(ctx)
@@ -68,6 +62,10 @@ func (v *SonataFlowCustomValidator) ValidateCreate(ctx context.Context, obj runt
 	workflow := obj.(*SonataFlow)
 	fmt.Printf("SonataFlowCustomValidator.ValidateCreate for workflow %s/%s\n", workflow.Namespace, workflow.Name)
 
+	// 1) take the namespace, does it has a SFP, either Global or local with DI enabled?
+	// 2) query the cache
+	// 3) (cache is not warmed, force it, a few requests should hit the un-warmed cache
+
 	if workflow.Name == "hello-fail" {
 		return nil, fmt.Errorf("the workflow %s, is not valid", workflow.Name)
 	}
@@ -78,7 +76,7 @@ func (v *SonataFlowCustomValidator) ValidateCreate(ctx context.Context, obj runt
 	return nil, nil
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
+// ValidateUpdate implements custom update-time validations for a SonataFlow.
 func (v *SonataFlowCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (warnings admission.Warnings, err error) {
 	fmt.Printf("SonataFlowCustomValidator.ValidateUpdate\n")
 	req, err := admission.RequestFromContext(ctx)
