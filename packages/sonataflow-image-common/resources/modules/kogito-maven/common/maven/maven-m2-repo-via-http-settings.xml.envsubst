@@ -45,7 +45,7 @@
         <repository>
           <id>apache.snapshots</id>
           <name>Apache Snapshot Repository</name>
-          <url>https://repository.apache.org/snapshots</url>
+          <url>https://maven.pkg.github.com/kubesmarts/logic-maven-repository</url>
           <releases>
             <enabled>false</enabled>
           </releases>
@@ -112,7 +112,7 @@
         <pluginRepository>
           <id>apache-public-repository-group</id>
           <name>Apache Public Repository Group</name>
-          <url>https://repository.apache.org/content/groups/public/</url>
+          <url>https://maven.pkg.github.com/kubesmarts/logic-maven-repository</url>
           <layout>default</layout>
           <releases>
             <enabled>false</enabled>

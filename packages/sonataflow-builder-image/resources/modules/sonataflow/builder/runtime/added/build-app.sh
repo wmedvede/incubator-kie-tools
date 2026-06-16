@@ -48,6 +48,9 @@ else
     log_warning "-> Nothing to copy from ${resources_path}"
 fi
 
+echo "XXXXXXXXXXXXXXXXXXXXXXXXXXX source generate metadata 2"
+source "${script_dir_path}"/generate-metadata.sh
+
 # Overwrite Quarkus Registry config if necessary
 if [ -n "$QUARKUS_REGISTRY_CONFIG_PATH" ] && [ -f "$QUARKUS_REGISTRY_CONFIG_PATH" ]; then
   log_info "-> Using custom Quarkus registry config: $QUARKUS_REGISTRY_CONFIG_PATH"
